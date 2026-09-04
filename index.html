@@ -287,6 +287,7 @@ input.rspec{flex-basis:100%;margin-left:37px;width:auto}
 .wl .t{color:var(--ink-3);font-size:11.5px;flex:none;padding-top:2px;font-variant-numeric:tabular-nums}
 .wl .b{color:var(--ink);line-height:1.65}
 .wl.place .b{font-weight:700;color:var(--accent)}
+.wl.item .b{font-weight:700}
 .wl.head .b{font-weight:700}
 .wl.doubt .b{color:var(--amber)}
 .wl.bad .b{color:var(--crit)}
@@ -1342,7 +1343,7 @@ function sayItem(cat,t){
   var list=(KOUSHU[cat]||{}).i||[];
   for(var i=0;i<list.length;i++) if(t.indexOf(list[i][0])>=0) return list[i][0];
   if(/CF|クッションフロア/.test(t)) return "CF張り";
-  if(/クロス|天井|壁/.test(t))       return "クロス張替え";
+  if(/クロス|壁紙|クロース|壁貼|天井|壁/.test(t)) return "クロス張替え";
   if(/長尺/.test(t))                 return "長尺シート";
   if(/タイルカーペット/.test(t))     return "タイルカーペット";
   if(/フロアタイル/.test(t))         return "フロアタイル張り";
@@ -1485,7 +1486,13 @@ function walkLine(j,raw){
   cat=cat||V.walkCat;
   if(!cat) return note("bad","工種が分かりませんでした：" + t);
   var pv=sayParse(cat, t, V.walkItem);
-  if(!pv.rows.length) return note("bad","読み取れませんでした：" + t);
+  if(!pv.rows.length){
+    /* 「クロス」「壁紙」だけ言った——数はまだ。工事だけ切り替えて、そう見せる。
+       黙っていると、聞こえていないのか切り替わったのか分からない */
+    if(nm) return note("item","ここから " + nm.name
+      + (V.walkPlace ? "（" + V.walkPlace + "）" : ""));
+    return note("bad","読み取れませんでした：" + t);
+  }
   /* 場所を言っていない行は、いまいる部屋のもの */
   pv.rows.forEach(function(r){ if(!r.place && V.walkPlace) r.place=V.walkPlace; });
   sayApply(j,cat,pv);
@@ -1527,21 +1534,36 @@ function startDictate(){
     /* 歩いているときは、1行ずつその場で行き先を決める */
     if(V.view==="walk"){
       add.split(SPLIT_LINES).forEach(function(L){ if(L.trim()) walkLine(jj,L); });
-      save(); render(); return;
+      save(); walkRepaint(jj); return;
     }
     V.impText=(V.impText||"")+add;
     if(!flushImp(jj)) render();
   };
   r.onerror=function(e){
-    SAY_REC=null;
+    /* 何も喋らなかっただけのときは、黙って掛け直す。いちいち知らせない */
+    if(e.error==="no-speech"||e.error==="aborted") return;
+    SAY_REC=null; SAY_WANT=false;
     walkFallback(e.error==="not-allowed"
       ? "ここではマイクが使えません。打つ欄を開きました"
       : "うまく聞き取れませんでした。打つ欄を開きました");
   };
-  r.onend=function(){ if(SAY_REC){ SAY_REC=null; render(); } };
-  SAY_REC=r;
-  try{ r.start(); toast("聞いています。工事名は言わなくて大丈夫です"); }
-  catch(err){ SAY_REC=null; toast("いま聞き取りを始められません"); }
+  /* iPhoneは一言ごとに聞き取りを終わらせる。continuous を無視する端末がある。
+     止めると言われるまで、こちらから掛け直す。押し直させない */
+  r.onend=function(){
+    if(SAY_REC!==r) return;
+    if(SAY_WANT){
+      try{ r.start(); return; }catch(e){}
+      setTimeout(function(){
+        if(!SAY_WANT || SAY_REC!==r) return;
+        try{ r.start(); }catch(e){ SAY_REC=null; SAY_WANT=false; render(); }
+      },220);
+      return;
+    }
+    SAY_REC=null; render();
+  };
+  SAY_REC=r; SAY_WANT=true;
+  try{ r.start(); toast("聞いています。押し直さなくて大丈夫です"); }
+  catch(err){ SAY_REC=null; SAY_WANT=false; toast("いま聞き取りを始められません"); }
 }
 /* 声がだめでも行き止まりにしない。同じことを打てる欄をその場に開く。
    歩く画面でも、工種の画面でも、開く先は違うが考え方は同じ */
@@ -1554,6 +1576,7 @@ function walkFallback(why){
   toast(why);
 }
 function stopDictate(){
+  SAY_WANT=false;
   if(!SAY_REC) return;
   var r=SAY_REC; SAY_REC=null;
   try{ r.stop(); }catch(e){}
@@ -2211,7 +2234,7 @@ function sendToISS(mode){
 }
 
 /* ===== 画面 ===== */
-var BUILD="2026-09-04 18:49";
+var BUILD="2026-09-04 19:11";
 var ROLE="sales";
 try{ ROLE=localStorage.getItem("genchoRole")||"sales"; }catch(e){}
 /* 営業に配る版には単価が入っていない。ISS委託者モードには切り替えられない */
@@ -2233,14 +2256,29 @@ function roleNote(){
 var V={view:"home",job:null,tab:"info",cat:null,focus:null,arow:null,allplace:null,moreplace:null,rooms:false,imp:null,impText:"",impGot:0,saybox:false,sayText:"",impItem:null,
        walkPlace:null,walkCat:null,walkItem:null,walkType:false,walkText:""};
 /* 聞き取り中の装置。喋りっぱなしにできるよう、止めるまで持っておく */
-var SAY_REC=null;
+var SAY_REC=null, SAY_WANT=false;
 /* 行の区切り。ここで1か所に決めておく */
 var SPLIT_LINES=/[\r\n]+/;
 var app=document.getElementById("app");
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){
   return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function J(){ return DB.jobs.filter(function(x){return x.id===V.job;})[0]; }
-function go(v,a,b){ V.view=v; if(a!==undefined)V.job=a; if(b!==undefined)V.cat=b; render(); window.scrollTo(0,0); }
+function go(v,a,b){
+  V.view=v; if(a!==undefined)V.job=a; if(b!==undefined)V.cat=b;
+  render(); toTop();
+}
+/* 画面を変えたら、いちばん上を見せる。
+   枠の中で開かれているとき window.scrollTo は枠の中しか動かない。
+   中身が変わったのに見ている場所が動かず、「開かない」「戻らない」に見えていた。
+   親にも「ここを見せて」と頼むことで、枠の中でも上に戻る */
+function toTop(){
+  try{ window.scrollTo(0,0); }catch(e){}
+  try{ document.documentElement.scrollTop=0; document.body.scrollTop=0; }catch(e){}
+  try{
+    var h=document.querySelector("header");
+    if(h && h.scrollIntoView) h.scrollIntoView({block:"start"});
+  }catch(e){}
+}
 function render(){
   ({home:home,job:jobView,koushu:koushuView,sum:sumView,walk:walkView})[V.view](); dock(); paintAllActive();
   /* (A) ISS委託者は営業の入力を書き換えない。入力欄そのものを触れなくする */
@@ -2409,7 +2447,7 @@ function home(){
     +'　工種は実際の見積明細から整理した17工種101項目です。入力内容はこの端末の中だけに保存されます（試作のため）。'
     /* 共有リンクは古い版に固定されることがある。どの版を見ているか分かるように出す */
     +'<br><span style="color:var(--ink-3);font-size:11.5px">このアプリの更新　'
-    +'<b class="num">2026-09-04 18:49</b>　'
+    +'<b class="num">2026-09-04 19:11</b>　'
     +'（画面が古いと思ったら、ここの日時を教えてください）</span></p>'
     +'<button class="btn danger sm" data-reset style="margin-top:8px">サンプルの状態に戻す</button>';
   app.innerHTML=h;
@@ -2815,6 +2853,82 @@ function impBox(name){
     +'</div></div>';
 }
 
+/* 入ってすぐの3つ。質問ではなく、空欄が置いてあるだけ */
+function walkHeadHTML(j){
+  var hd=walkHead(j), left=hd.filter(function(x){return !x.v;});
+  var h='<div class="card"><div class="card-h"><h3>入ってすぐ</h3>'
+    +(left.length?'<span class="pill crit" style="margin-left:auto">まだ'+left.length+'</span>'
+                 :'<span class="pill ok" style="margin-left:auto">ずみ</span>')+'</div>'
+    +'<div class="card-b"><div class="walkhead">';
+  hd.forEach(function(x){
+    h+='<div class="wh'+(x.v?' on':'')+'"><span class="l">'+esc(x.l)+'</span>'
+      +'<span class="v">'+(x.v?esc(x.v):'<i>'+esc(x.say)+'</i>')+'</span></div>';
+  });
+  return h+'</div>'
+    +(j.power==="通電なし"
+      ? '<div class="warnbar" style="margin-top:8px">通電なし。'
+        +'<b>発注時に、管理会社かオーナーへ通電の依頼が要ります。</b>そのままお続けください。</div>'
+      : '')
+    +'</div></div>';
+}
+/* 喋った順に積み上がる。新しいものが上 */
+function walkLogHTML(j){
+  var log=(j.walk||[]);
+  var h='<div class="card"><div class="card-h"><h3>書き留めたこと</h3>'
+    +(V.walkPlace?'<span class="pill" style="margin-left:auto">いま '+esc(V.walkPlace)+'</span>':'')
+    +'<span class="eyebrow" style="margin-left:8px">'+log.length+'件</span></div><div class="card-b">';
+  if(!log.length){
+    h+='<div class="empty">まだ何もありません。<br>'
+      +'「玄関」と言えば場所が変わり、「クロス」と言えばクロスに切り替わり、'
+      +'「壁 2.4が2本」で行が入ります。</div>';
+  } else {
+    h+='<div class="walklog">';
+    log.slice().reverse().slice(0,60).forEach(function(w){
+      h+='<div class="wl '+(w.kind||"")+'">'
+        +'<span class="t">'+esc((w.at||"").slice(11,16))+'</span>'
+        +'<span class="b">'+esc(w.text||"")+'</span></div>';
+    });
+    h+='</div>';
+  }
+  return h+'</div></div>';
+}
+/* 帰り際。ここが空だと職人が入れない */
+function walkTailHTML(j){
+  var tl=walkTail(j);
+  return '<div class="card"><div class="card-h"><h3>帰る前</h3>'
+    +(tl[0].v?'<span class="pill ok" style="margin-left:auto">ずみ</span>'
+             :'<span class="pill crit" style="margin-left:auto">まだ</span>')+'</div>'
+    +'<div class="card-b"><div class="walkhead">'
+    +'<div class="wh'+(tl[0].v?' on':'')+'"><span class="l">'+esc(tl[0].l)+'</span>'
+    +'<span class="v">'+(tl[0].v?esc(tl[0].v):'<i>'+esc(tl[0].say)+'</i>')+'</span></div>'
+    +'</div>'
+    +'<div class="note" style="margin-top:6px">職人はここから入ります。書かないと工事が始まりません。</div>'
+    +'</div></div>';
+}
+/* 打っている最中に画面ごと描き直すと、iPhoneはキーボードを閉じてしまう。
+   変わったところだけ塗り替えて、打っている欄には指一本ふれない */
+function walkRepaint(j){
+  var a=document.getElementById("wkHead"),
+      b=document.getElementById("wkLog"),
+      c=document.getElementById("wkTail");
+  if(!a||!b||!c){ render(); return; }
+  a.innerHTML=walkHeadHTML(j);
+  b.innerHTML=walkLogHTML(j);
+  c.innerHTML=walkTailHTML(j);
+  var m=document.querySelector(".walkmic");
+  if(m){
+    var on=!!SAY_REC;
+    m.className="walkmic"+(on?" on":"");
+    m.setAttribute(on?"data-impstop":"data-walkgo","");
+    if(on) m.removeAttribute("data-walkgo"); else m.removeAttribute("data-impstop");
+    m.innerHTML='<span class="mic">'+(on?'■':'●')+'</span>'
+      +'<b>'+(on?'聞いています　押すと止まります':'ここを押して、あとは喋るだけ')+'</b>'
+      +'<span class="sub">'+(on
+        ? (V.walkPlace?'いま '+esc(V.walkPlace):'部屋の名前を言うと、そこからの記録になります')
+        : '工種も項目も選ばなくて大丈夫です')+'</span>';
+  }
+}
+
 /* 歩く画面。押すのは最初の●だけ。あとは喋り続ける */
 /* （view の切り替えは render の中で walk を見る） */
 function walkView(){
@@ -2849,51 +2963,9 @@ function walkView(){
       +'声が使えないときは、ここに打つ</button>';
   }
 
-  /* 入ってすぐの3つ。質問ではなく、空欄が置いてあるだけ */
-  var hd=walkHead(j), left=hd.filter(function(x){return !x.v;});
-  h+='<div class="card"><div class="card-h"><h3>入ってすぐ</h3>'
-    +(left.length?'<span class="pill crit" style="margin-left:auto">まだ'+left.length+'</span>'
-                 :'<span class="pill ok" style="margin-left:auto">ずみ</span>')+'</div>'
-    +'<div class="card-b"><div class="walkhead">';
-  hd.forEach(function(x){
-    h+='<div class="wh'+(x.v?' on':'')+'"><span class="l">'+esc(x.l)+'</span>'
-      +'<span class="v">'+(x.v?esc(x.v):'<i>'+esc(x.say)+'</i>')+'</span></div>';
-  });
-  h+='</div>'
-    +(j.power==="通電なし"
-      ? '<div class="warnbar" style="margin-top:8px">通電なし。'
-        +'<b>発注時に、管理会社かオーナーへ通電の依頼が要ります。</b>そのままお続けください。</div>'
-      : '')
-    +'</div></div>';
-
-  /* 喋った順に積み上がる。新しいものが上 */
-  h+='<div class="card"><div class="card-h"><h3>書き留めたこと</h3>'
-    +'<span class="eyebrow" style="margin-left:auto">'+log.length+'件</span></div><div class="card-b">';
-  if(!log.length){
-    h+='<div class="empty">まだ何もありません。<br>'
-      +'「玄関」と言えば場所が変わり、「クロス 壁 2.4が2本」で行が入ります。</div>';
-  } else {
-    h+='<div class="walklog">';
-    log.slice().reverse().slice(0,60).forEach(function(w){
-      h+='<div class="wl '+(w.kind||"")+'">'
-        +'<span class="t">'+esc((w.at||"").slice(11,16))+'</span>'
-        +'<span class="b">'+esc(w.text||"")+'</span></div>';
-    });
-    h+='</div>';
-  }
-  h+='</div></div>';
-
-  /* 帰り際。ここが空だと職人が入れない */
-  var tl=walkTail(j);
-  h+='<div class="card"><div class="card-h"><h3>帰る前</h3>'
-    +(tl[0].v?'<span class="pill ok" style="margin-left:auto">ずみ</span>'
-             :'<span class="pill crit" style="margin-left:auto">まだ</span>')+'</div>'
-    +'<div class="card-b"><div class="walkhead">'
-    +'<div class="wh'+(tl[0].v?' on':'')+'"><span class="l">'+esc(tl[0].l)+'</span>'
-    +'<span class="v">'+(tl[0].v?esc(tl[0].v):'<i>'+esc(tl[0].say)+'</i>')+'</span></div>'
-    +'</div>'
-    +'<div class="note" style="margin-top:6px">職人はここから入ります。書かないと工事が始まりません。</div>'
-    +'</div></div>';
+  h+='<div id="wkHead">'+walkHeadHTML(j)+'</div>'
+    +'<div id="wkLog">'+walkLogHTML(j)+'</div>'
+    +'<div id="wkTail">'+walkTailHTML(j)+'</div>';
 
   h+='<button class="btn wide" data-back="job">現調の中身を見る</button>';
   return app.innerHTML=h;
@@ -3482,7 +3554,9 @@ document.addEventListener("click",function(e){
     var rest=String(V.walkText||"").trim();
     if(!rest){ toast("打った文がありません"); return; }
     rest.split(SPLIT_LINES).forEach(function(L){ if(L.trim()) walkLine(j,L); });
-    V.walkText=""; save(); render(); return;
+    V.walkText="";
+    var te=document.querySelector("[data-walktext]"); if(te) te.value="";
+    save(); walkRepaint(j); return;
   }
   /* 歩きはじめる。押すのはこの1回だけ */
   if(t.hasAttribute("data-walkgo")&&j){
@@ -3885,9 +3959,9 @@ document.addEventListener("input",function(e){
     if(ix<0){ V.walkText=raw; return; }
     var done=raw.slice(0,ix), tail=raw.slice(ix+1);
     done.split(SPLIT_LINES).forEach(function(L){ if(L.trim()) walkLine(j,L); });
-    V.walkText=tail; save(); render();
-    var ta=document.querySelector("[data-walktext]");
-    if(ta){ ta.focus(); try{ ta.setSelectionRange(tail.length,tail.length); }catch(e){} }
+    V.walkText=tail; save();
+    /* 打っている欄はそのまま。入った行だけ上に足す */
+    el.value=tail; walkRepaint(j);
     return;
   }
   if(el.dataset.saybox!==undefined){ V.sayText=el.value; return; }
