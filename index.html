@@ -291,10 +291,25 @@ input.rspec{flex-basis:100%;margin-left:37px;width:auto}
 .wl.head .b{font-weight:700}
 .wl.doubt .b{color:var(--amber)}
 .wl.bad .b{color:var(--crit)}
-.micbtn{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);
-  background:var(--surface);color:var(--crit);font-size:11px;line-height:1;cursor:pointer;
-  flex:none;margin-left:auto;display:flex;align-items:center;justify-content:center}
-.micbtn.on{background:var(--crit);border-color:var(--crit);color:#fff;animation:pulse 1.4s infinite}
+/* 工種ページの頭。声は押す物として立てる。項目チップに紛れさせない */
+.voicebar{display:flex;align-items:center;gap:12px;width:100%;margin:2px 0 10px;
+  padding:13px 15px;border-radius:12px;border:2px solid var(--accent);
+  background:var(--surface);cursor:pointer;text-align:left;min-height:62px}
+.voicebar .mic{color:var(--crit);font-size:15px;line-height:1;flex:none}
+.voicebar .tx{display:flex;flex-direction:column;gap:2px;min-width:0}
+.voicebar b{font-size:15px;font-weight:700;color:var(--ink)}
+.voicebar small{font-size:12px;color:var(--ink-2);line-height:1.5}
+.voicebar.on{border-color:var(--crit);background:var(--crit-soft)}
+.voicebar.on .mic{animation:pulse 1.4s infinite}
+
+/* 項目ごとの声。丸だけだと何のボタンか分からないので、文字を付ける */
+.micbtn{display:inline-flex;align-items:center;gap:5px;height:32px;padding:0 11px;
+  border-radius:999px;border:1.5px solid var(--accent);background:var(--accent-soft);
+  color:var(--accent);font-size:12.5px;font-weight:700;line-height:1;cursor:pointer;
+  flex:none;margin-left:auto}
+.micbtn .d{color:var(--crit);font-size:10px}
+.micbtn.on{background:var(--crit);border-color:var(--crit);color:#fff}
+.micbtn.on .d{color:#fff;animation:pulse 1.4s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
 .impbox.live{border-color:var(--crit)}
 .imprest .live{color:var(--crit);font-weight:700;display:flex;align-items:center;gap:5px}
@@ -2237,7 +2252,7 @@ function sendToISS(mode){
 }
 
 /* ===== 画面 ===== */
-var BUILD="2026-09-04 19:16";
+var BUILD="2026-09-04 19:27";
 var ROLE="sales";
 try{ ROLE=localStorage.getItem("genchoRole")||"sales"; }catch(e){}
 /* 営業に配る版には単価が入っていない。ISS委託者モードには切り替えられない */
@@ -2450,7 +2465,7 @@ function home(){
     +'　工種は実際の見積明細から整理した17工種101項目です。入力内容はこの端末の中だけに保存されます（試作のため）。'
     /* 共有リンクは古い版に固定されることがある。どの版を見ているか分かるように出す */
     +'<br><span style="color:var(--ink-3);font-size:11.5px">このアプリの更新　'
-    +'<b class="num">2026-09-04 19:16</b>　'
+    +'<b class="num">2026-09-04 19:27</b>　'
     +'（画面が古いと思ったら、ここの日時を教えてください）</span></p>'
     +'<button class="btn danger sm" data-reset style="margin-top:8px">サンプルの状態に戻す</button>';
   app.innerHTML=h;
@@ -2998,8 +3013,17 @@ function koushuView(){
     + Object.keys(PACKS).filter(function(k){ return PACKS[k].cat===V.cat; })
         .map(function(k){ return '<button class="pkadd" data-addpack="'+esc(k)+'">＋ '+esc(k)
           +'<span class="n">まとめて</span></button>'; }).join("")
-    +'<button class="free" data-addfree>＋ 自由に入力</button>'
-    +'<button class="free imp" data-imp>声・メモから取り込み</button></div></div>';
+    +'<button class="free" data-addfree>＋ 自由に入力</button></div></div>';
+  /* 声は、項目チップに紛れさせない。押す物として立てる */
+  var catOn = (SAY_REC && V.impItem==null);
+  h+='<button class="voicebar'+(catOn?" on":"")+'" '+(catOn?'data-impstop':'data-sayall')+'>'
+    +'<span class="mic">'+(catOn?'■':'●')+'</span>'
+    +'<span class="tx"><b>'+(catOn?'聞いています　押すと止まります':esc(cat)+'を声で書く')+'</b>'
+    +'<small>'+(catOn
+       ? '工事名・場所・数を続けて言ってください。押し直しは要りません'
+       : '「クロス 玄関 壁 2.4が2本」のように言うだけ。押し直しは要りません')+'</small></span></button>';
+  h+='<button class="btn ghost wide sm" data-imp style="margin:-4px 0 12px">'
+    +'メモから貼る／打って入れる</button>';
   if(V.imp===cat && V.impItem==null) h+=impBox(null);
 
   if(!list.length) h+='<div class="empty">上のボタンを押すと、行が増えます。</div>';
@@ -3015,7 +3039,8 @@ function koushuView(){
       /* この工事に向けて喋る。工事名を言わなくていいぶん、言い間違えようがない */
       +'<button class="micbtn'+(micOn?" on":"")+'" data-sayit="'+idx+'" '
       +'aria-label="'+esc(it.name)+'を声で足す" title="声で足す">'
-      +(micOn?'■':'●')+'</button>'
+      +'<span class="d">'+(micOn?'■':'●')+'</span>'
+      +(micOn?'止める':'声')+'</button>'
       +(m2?'<button class="helpbtn" data-help="'+esc(it.name)+'">?</button>':'')
       +'<button class="x" data-del="'+idx+'" aria-label="削除">×</button></div>';
 
@@ -3501,7 +3526,7 @@ document.addEventListener("click",function(e){
   var t=e.target.closest("[data-open],[data-new],[data-reset],[data-back],[data-tab],[data-cat],[data-go],"
     +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acflag],[data-setf],[data-spec],"
     +"[data-addroom],[data-delroom],[data-openrooms],[data-adde],[data-dele],[data-adds],[data-dels],[data-help],[data-send],"
-    +"[data-keyset],[data-keydel],[data-keyadd],[data-place],[data-allplace],[data-pdrop],[data-moreplace],[data-rsc],[data-rpart],[data-hi],[data-hd],[data-nq],[data-nadd],[data-dir],[data-loss],[data-grip],[data-tile],[data-eqo],[data-pk],[data-pko],[data-pks],[data-pkg],[data-pkdz],[data-pkp],[data-addpack],[data-say],[data-imp],[data-impflush],[data-impclose],[data-addrow],[data-delrow],[data-sayit],[data-impstop],[data-saybox],[data-sayword],[data-picopen],[data-picclose],[data-picdel],[data-walkgo],[data-go],[data-walktypeon],[data-walktypeoff],[data-walkflush]");
+    +"[data-keyset],[data-keydel],[data-keyadd],[data-place],[data-allplace],[data-pdrop],[data-moreplace],[data-rsc],[data-rpart],[data-hi],[data-hd],[data-nq],[data-nadd],[data-dir],[data-loss],[data-grip],[data-tile],[data-eqo],[data-pk],[data-pko],[data-pks],[data-pkg],[data-pkdz],[data-pkp],[data-addpack],[data-say],[data-imp],[data-impflush],[data-impclose],[data-addrow],[data-delrow],[data-sayit],[data-impstop],[data-saybox],[data-sayword],[data-picopen],[data-picclose],[data-picdel],[data-walkgo],[data-go],[data-walktypeon],[data-walktypeoff],[data-walkflush],[data-sayall]");
   if(!t) return;
   var j=J();
 
@@ -3553,6 +3578,11 @@ document.addEventListener("click",function(e){
     render(); startDictate(); return;
   }
   if(t.hasAttribute("data-impstop")){ stopDictate(); return render(); }
+  /* 工種ぜんぶに向けて喋る。工事名から言う */
+  if(t.hasAttribute("data-sayall")&&j){
+    V.imp=V.cat; V.impItem=null; V.impText=""; V.impGot=0;
+    render(); startDictate(); return;
+  }
   if(t.hasAttribute("data-walktypeon")){ V.walkType=true; render();
     var e1=document.querySelector("[data-walktext]"); if(e1) e1.focus(); return; }
   if(t.hasAttribute("data-walktypeoff")){ V.walkType=false; V.walkText=""; return render(); }
