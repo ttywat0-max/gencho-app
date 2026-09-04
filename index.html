@@ -1389,9 +1389,11 @@ function walkHead(j){
      say:"「エアコン2台」"}
   ];
 }
+/* 帰る前に確かめること。基本情報の「鍵の場所」と同じものを見る。
+   先に書いてあれば、ここは最初から埋まっている */
 function walkTail(j){
-  return [{k:"keybox", l:"キーボックスの場所", v:j.keybox||"",
-           say:"「キーボックスはメーターボックスの中」"}];
+  return [{k:"key", l:"鍵の場所", v:j.key||"",
+           say:"「鍵はメーターボックスの中」"}];
 }
 /* 部屋の名前だけを言った行か。言ったならその名前を返す */
 /* 「洋室1」「洋室いち」も部屋。数字が入るからといって弾かない */
@@ -1437,9 +1439,9 @@ function walkHeadHeard(j,t){
   if(amp){ j.amp=(j.amp?j.amp+" ":"")+amp[1]+"A"; return "アンペア：" + j.amp; }
   var acm=s2.match(/エアコン[^0-9]{0,4}(\d+)\s*台?/);
   if(acm){ j.ac=acm[1]; return "エアコン：" + acm[1] + "台"; }
-  if(/キーボックス|キーBOX|鍵箱/.test(s2)){
-    var where=s2.replace(/.*(キーボックス|キーBOX|鍵箱)\s*(は|を|に)?/,"").trim();
-    if(where){ j.keybox=where; return "キーボックス：" + where; }
+  if(/キーボックス|キーBOX|鍵箱|鍵は|鍵を/.test(s2)){
+    var where=s2.replace(/.*(キーボックス|キーBOX|鍵箱|鍵)\s*(は|を|に)?/,"").trim();
+    if(where){ j.key=where; return "鍵の場所：" + where; }
   }
   return null;
 }
@@ -1532,7 +1534,7 @@ function startDictate(){
     if(!add) return;
     var jj=J(); if(!jj) return;
     /* 歩いているときは、1行ずつその場で行き先を決める */
-    if(V.view==="walk"){
+    if(V.tab==="walk"&&V.view==="job"){
       add.split(SPLIT_LINES).forEach(function(L){ if(L.trim()) walkLine(jj,L); });
       save(); walkRepaint(jj); return;
     }
@@ -1568,7 +1570,7 @@ function startDictate(){
 /* 声がだめでも行き止まりにしない。同じことを打てる欄をその場に開く。
    歩く画面でも、工種の画面でも、開く先は違うが考え方は同じ */
 function walkFallback(why){
-  if(V.view==="walk"){ V.walkType=true; }
+  if(V.tab==="walk"&&V.view==="job"){ V.walkType=true; }
   else { V.saybox=true; }
   render();
   var el=document.querySelector("[data-walktext]")||document.querySelector("[data-saybox]");
@@ -2093,10 +2095,11 @@ function buildPayload(j){
         写真枚数:picCount(j.id,picTagShot(rm,p))}); }); });
   });
   return {現調ID:j.gid,工事ID:j.jobNo||"",顧客名:j.customer||"",店舗:j.store||"",担当:j.staff||"",
-    希望工期:j.term||"",納品先:(j.deliv||"")+(j.delivMemo?"（"+j.delivMemo+"）":""),
+    希望工期:j.term||"",
+    納品先:delivList(j).join("・")+(j.delivMemo?"（"+j.delivMemo+"）":""),
     ブレーカー:j.breaker||"",通電:j.power||"",
     通電依頼:(j.power==="通電なし")?"要":"",
-    アンペア:j.amp||"",キーボックス:j.keybox||"",
+    アンペア:j.amp||"",
     職人指定:j.shokunin||"",注意事項:j.caution||"",
     物件名:j.name||"",住所:j.addr||"",間取り:madoriText(j),工事申請:j.apply||"",
     駐車場:(j.parking||"")+(j.parkingMemo?"（"+j.parkingMemo+"）":""),鍵場所:j.key||"",エアコン台数:(j.ac||""),
@@ -2143,7 +2146,7 @@ function diffSnap(a,b){
   var out=[];
   ["顧客名","店舗","担当","物件名","住所","間取り","工事申請","駐車場","鍵場所",
      "エアコン台数","エアコン備考","工事ID","希望工期","納品先","職人指定","注意事項",
-     "ブレーカー","通電","通電依頼","アンペア","キーボックス",
+     "ブレーカー","通電","通電依頼","アンペア",
      "ISS伝達メモ","自由記入","現調日"]
     .forEach(function(k){
       if(String(a[k]||"")!==String(b[k]||""))
@@ -2234,7 +2237,7 @@ function sendToISS(mode){
 }
 
 /* ===== 画面 ===== */
-var BUILD="2026-09-04 19:11";
+var BUILD="2026-09-04 19:16";
 var ROLE="sales";
 try{ ROLE=localStorage.getItem("genchoRole")||"sales"; }catch(e){}
 /* 営業に配る版には単価が入っていない。ISS委託者モードには切り替えられない */
@@ -2280,7 +2283,7 @@ function toTop(){
   }catch(e){}
 }
 function render(){
-  ({home:home,job:jobView,koushu:koushuView,sum:sumView,walk:walkView})[V.view](); dock(); paintAllActive();
+  ({home:home,job:jobView,koushu:koushuView,sum:sumView})[V.view](); dock(); paintAllActive();
   /* (A) ISS委託者は営業の入力を書き換えない。入力欄そのものを触れなくする */
   if(isISS()) app.querySelectorAll("input,textarea,select").forEach(function(el){
     if(el.type==="checkbox"||el.type==="radio"||el.tagName==="SELECT") el.disabled=true;
@@ -2447,7 +2450,7 @@ function home(){
     +'　工種は実際の見積明細から整理した17工種101項目です。入力内容はこの端末の中だけに保存されます（試作のため）。'
     /* 共有リンクは古い版に固定されることがある。どの版を見ているか分かるように出す */
     +'<br><span style="color:var(--ink-3);font-size:11.5px">このアプリの更新　'
-    +'<b class="num">2026-09-04 19:11</b>　'
+    +'<b class="num">2026-09-04 19:16</b>　'
     +'（画面が古いと思ったら、ここの日時を教えてください）</span></p>'
     +'<button class="btn danger sm" data-reset style="margin-top:8px">サンプルの状態に戻す</button>';
   app.innerHTML=h;
@@ -2461,13 +2464,19 @@ function jobView(){
   var pt=photoTotals(j), oc=openChecks(j);
   var h='<div class="stickynav"><div class="backbar"><button class="backbtn" data-back="home">‹ 現調一覧</button>'
     +'<span class="where">'+esc(j.name)+'</span></div>';
-  h+='<div class="tabs" role="tablist">'+tb("info","基本情報")+tb("items","現調内容")+tb("equip","設備台帳")
+  h+='<div class="tabs" role="tablist">'+tb("info","基本")+tb("walk","歩く")+tb("items","工種")+tb("equip","設備")
     +tb("issue","要確認"+(oc?' <span class="tabbadge">'+oc+'</span>':''))
     +tb("photo","写真"+(pt.left?' <span class="tabbadge">'+pt.left+'</span>':''))+'</div></div>';
-  h+=({info:infoTab,items:catListTab,equip:equipTab,issue:issueTab,photo:photoTab})[V.tab](j);
+  h+=({info:infoTab,walk:walkTab,items:catListTab,equip:equipTab,issue:issueTab,photo:photoTab})[V.tab](j);
   app.innerHTML=h;
 }
 
+/* 納品先は複数ありうる。文字列でも配列でも同じように扱う */
+function delivList(j){
+  var d=j&&j.deliv;
+  if(!d) return [];
+  return Array.isArray(d) ? d : String(d).split("・").filter(Boolean);
+}
 function fld(label,key,val,type){
   return '<div class="field"><label>'+label+'</label><input type="'+(type||"text")+'" value="'+esc(val||"")+'" data-jf="'+key+'"></div>';
 }
@@ -2535,9 +2544,13 @@ function infoTab(j){
           +'placeholder="場所・料金・利用時間など（例：建物裏 3番、1日1,500円、管理人へ申告）" '
           +'style="min-height:52px">'+esc(j.parkingMemo||"")+'</textarea></div>'
         : '')
-    /* 鍵場所は同じキーボックスを使い回すことが多いので、端末に覚えさせる */
-    +'<div class="field"><label>鍵場所</label>'
-    +'<input type="text" value="'+esc(j.key||"")+'" data-jf="key" placeholder="例：現地キーボックス、管理人室">'
+    /* 鍵場所は同じキーボックスを使い回すことが多いので、端末に覚えさせる。
+       現調で開けた場所と、帰りに仕込む場所は同じもの。欄を2つ持たない */
+    +'<div class="field"><label>鍵の場所</label>'
+    +'<input type="text" value="'+esc(j.key||"")+'" data-jf="key" placeholder="例：メーターボックス内、玄関ドアノブ、管理人室">'
+    +'<div class="note" style="margin-top:4px">'
+    +'現調で開けた場所であり、<b>帰りにキーボックスを仕込む場所</b>でもあります。'
+    +'職人はここから入ります。</div>'
     +'<div class="chips sm" style="margin-top:6px">'
     + (DB.keyPlaces||[]).map(function(k){
         return '<span class="keychip'+(j.key===k?' on':'')+'">'
@@ -2551,25 +2564,20 @@ function infoTab(j){
     /* ここから下は、ISSが発注を始めるのに要るもの。
        発注業務マニュアルに「工事ID・希望工期・注意事項」「納品先は営業の指示を必ず確認」
        とある。現調で決まっているのに伝わっていなかった。 */
-    +'<div class="grid2">'+fld("工事ID（FMの番号）","jobNo",j.jobNo)
+    /* 工事IDは営業が作れない。FMに打ち込んで初めて採番される。
+       ここに空欄を置くと「埋めなければ」と思わせるだけなので、置かない */
     +'<div class="field"><label>希望工期</label>'
     +'<input type="text" value="'+esc(j.term||"")+'" data-jf="term" placeholder="例：10/7〜10/11、10日から1週間">'
-    +'</div></div>'
+    +'</div>'
+    /* 現場入れと事務所入れが混ざる工事がある。1つに絞らせない */
     +'<div class="field"><label>材料の納品先</label><div class="chips">'
-    + ["現場入れ","事務所入れ","未定"].map(function(k){
-        return '<button data-jset="deliv|'+k+'" aria-pressed="'+(j.deliv===k)+'">'+k+'</button>'; }).join("")
+    + ["現場入れ","事務所入れ","支給あり","未定"].map(function(k){
+        return '<button data-jmulti="deliv|'+k+'" aria-pressed="'
+          +(delivList(j).indexOf(k)>=0)+'">'+k+'</button>'; }).join("")
     +'</div>'
     +'<input type="text" value="'+esc(j.delivMemo||"")+'" data-jf="delivMemo" style="margin-top:5px" '
     +'placeholder="鍵の所在が特殊なとき、置き場所の指定など">'
     +'<div class="note" style="margin-top:4px">材料は工事前に納品されないと、職人が何もできません。</div>'
-    +'</div>'
-    /* 帰るときにキーボックスを仕込む。職人はここから入るので、
-       書いていないと工事が始まらない */
-    +'<div class="field"><label>帰りに仕込むキーボックスの場所</label>'
-    +'<input type="text" value="'+esc(j.keybox||"")+'" data-jf="keybox" '
-    +'placeholder="例：メーターボックス内、玄関ドアノブ、隣室側の手すり">'
-    +'<div class="note" style="margin-top:4px">職人はここから入ります。'
-    +'現調の帰り際に仕込んだ場所を、そのまま書いてください。</div>'
     +'</div>'
     +'<div class="field"><label>職人の指定</label>'
     +'<input type="text" value="'+esc(j.shokunin||"")+'" data-jf="shokunin" '
@@ -2588,7 +2596,12 @@ function infoTab(j){
     +'<button class="helpbtn" data-openrooms style="margin-left:8px">'+(V.rooms?"閉じる":"開く")+'</button>'
     +'</div><div class="card-b"'+(V.rooms?"":" hidden")+'>'
     +'<p class="note" style="margin:0 0 8px">間取りを選ぶと自動で並びます。'
-    +'洋室が複数あるときなど、名前を直したいときだけ触ってください。</p>';
+    +'<b>ここに並んだ名前が、3か所で使われます。</b><br>'
+    +'① 歩きながら書くとき、この名前を言うと場所が切り替わります<br>'
+    +'② 拾い出しの「場所」の候補になります<br>'
+    +'③ 写真の撮る場所（部屋ごとに何枚）が決まります<br>'
+    +'現場の呼び方と違うときだけ直してください（洋室1 → 南の部屋 など）。'
+    +'ここで工事を選ぶ場所ではありません。</p>';
   (j.rooms||[]).forEach(function(rm,i){
     h+='<div class="qrow" style="grid-template-columns:1fr auto;margin-top:6px">'
       +'<input type="text" value="'+esc(rm)+'" data-room="'+i+'">'
@@ -2612,7 +2625,7 @@ function catListTab(j){
     +'打った時点でこの端末に入ります。保存ボタンはありません。</span></div>';
   /* 声で工事名を言えば、その問診票が開く。
      現調は両手が塞がっていて、目は現物を見ている。画面を見るために目を離させない */
-  h+='<button class="btn voice" data-go="walk"><span class="mic">●</span>'
+  h+='<button class="btn voice" data-tab="walk"><span class="mic">●</span>'
     +'歩きながら書く<small>押したら、あとは喋るだけ。工種も項目も選びません</small></button>';
   h+='<button class="btn ghost wide sm" data-say style="margin:-2px 0 10px">'
     +'工事名を1つだけ言って開く</button>';
@@ -2902,7 +2915,8 @@ function walkTailHTML(j){
     +'<div class="wh'+(tl[0].v?' on':'')+'"><span class="l">'+esc(tl[0].l)+'</span>'
     +'<span class="v">'+(tl[0].v?esc(tl[0].v):'<i>'+esc(tl[0].say)+'</i>')+'</span></div>'
     +'</div>'
-    +'<div class="note" style="margin-top:6px">職人はここから入ります。書かないと工事が始まりません。</div>'
+    +'<div class="note" style="margin-top:6px">職人はここから入ります。書かないと工事が始まりません。'
+    +'<b>基本情報の「鍵の場所」と同じ欄</b>なので、先に書いてあれば埋まっています。</div>'
     +'</div></div>';
 }
 /* 打っている最中に画面ごと描き直すと、iPhoneはキーボードを閉じてしまう。
@@ -2931,13 +2945,9 @@ function walkRepaint(j){
 
 /* 歩く画面。押すのは最初の●だけ。あとは喋り続ける */
 /* （view の切り替えは render の中で walk を見る） */
-function walkView(){
-  var j=J(); if(!j) return go("home");
+function walkTab(j){
   var on=!!SAY_REC, log=(j.walk||[]);
-  var h='<div class="stickynav"><div class="backbar">'
-    +'<button class="backbtn" data-back="job">‹ 現調</button>'
-    +'<span class="where">'+esc(j.name||"")+'</span></div></div>';
-
+  var h='';
   /* いちばん上に、押す物はこれ1つだけ */
   h+='<button class="walkmic'+(on?" on":"")+'" '+(on?'data-impstop':'data-walkgo')+'>'
     +'<span class="mic">'+(on?'■':'●')+'</span>'
@@ -2967,8 +2977,8 @@ function walkView(){
     +'<div id="wkLog">'+walkLogHTML(j)+'</div>'
     +'<div id="wkTail">'+walkTailHTML(j)+'</div>';
 
-  h+='<button class="btn wide" data-back="job">現調の中身を見る</button>';
-  return app.innerHTML=h;
+  h+='<button class="btn ghost wide sm" data-tab="items">工種ごとに見直す</button>';
+  return h;
 }
 
 /* ---------- 工種ごとの入力 ---------- */
@@ -3309,8 +3319,8 @@ function sumView(){
       : '')
     +'<tr><td style="background:var(--surface-2)">通電</td><td>'+esc(g("通電",j.power)||"—")
     +(g("アンペア",j.amp)?'　'+esc(g("アンペア",j.amp)):'')+'</td>'
-    +'<td style="background:var(--surface-2)">キーボックス</td><td class="nm">'
-    +esc(g("キーボックス",j.keybox)||"—")+'</td></tr>'
+    +'<td style="background:var(--surface-2)">鍵の場所</td><td class="nm">'
+    +esc(g("鍵場所",j.key)||"—")+'</td></tr>'
     +'<tr><td style="background:var(--surface-2)">希望工期</td><td>'+esc(g("希望工期",j.term)||"—")+'</td>'
     +'<td style="background:var(--surface-2)">納品先</td><td>'+esc(g("納品先",j.deliv)||"—")+'</td></tr>'
     +'<tr><td style="background:var(--surface-2)">注意事項</td><td colspan="3" class="nm">'+esc(g("注意事項",j.caution)||"—")+'</td></tr>'
@@ -3489,7 +3499,7 @@ document.addEventListener("keydown",function(e){
 /* ---------- 操作 ---------- */
 document.addEventListener("click",function(e){
   var t=e.target.closest("[data-open],[data-new],[data-reset],[data-back],[data-tab],[data-cat],[data-go],"
-    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-acflag],[data-setf],[data-spec],"
+    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acflag],[data-setf],[data-spec],"
     +"[data-addroom],[data-delroom],[data-openrooms],[data-adde],[data-dele],[data-adds],[data-dels],[data-help],[data-send],"
     +"[data-keyset],[data-keydel],[data-keyadd],[data-place],[data-allplace],[data-pdrop],[data-moreplace],[data-rsc],[data-rpart],[data-hi],[data-hd],[data-nq],[data-nadd],[data-dir],[data-loss],[data-grip],[data-tile],[data-eqo],[data-pk],[data-pko],[data-pks],[data-pkg],[data-pkdz],[data-pkp],[data-addpack],[data-say],[data-imp],[data-impflush],[data-impclose],[data-addrow],[data-delrow],[data-sayit],[data-impstop],[data-saybox],[data-sayword],[data-picopen],[data-picclose],[data-picdel],[data-walkgo],[data-go],[data-walktypeon],[data-walktypeoff],[data-walkflush]");
   if(!t) return;
@@ -3529,11 +3539,7 @@ document.addEventListener("click",function(e){
   /* タブを切り替えたら先頭から見せる。前の画面のスクロール位置が残っていた */
   if(t.dataset.tab){ V.tab=t.dataset.tab; render(); window.scrollTo(0,0); return; }
   if(t.dataset.cat){ return go("koushu",V.job,t.dataset.cat); }
-  if(t.dataset.go){
-    /* 歩きはじめるときは、いた場所と工事を白紙に戻す */
-    if(t.dataset.go==="walk"){ V.walkPlace=null; V.walkCat=null; V.walkItem=null; }
-    return go(t.dataset.go);
-  }
+  if(t.dataset.go){ return go(t.dataset.go); }
 
   if(t.hasAttribute("data-imp")){
     V.imp = (V.imp===V.cat && V.impItem==null) ? null : V.cat;
@@ -3697,6 +3703,14 @@ document.addEventListener("click",function(e){
     var ai2=j.acFlags.indexOf(t.dataset.acflag);
     if(ai2>=0) j.acFlags.splice(ai2,1); else j.acFlags.push(t.dataset.acflag);
     delete j.sample; save(); return render();
+  }
+  /* いくつでも選べる欄。押すたびに入り、もう一度押すと外れる */
+  if(t.dataset.jmulti&&j){
+    var mp=t.dataset.jmulti.split("|"), key=mp[0], val=mp[1];
+    var cur=(key==="deliv") ? delivList(j) : (Array.isArray(j[key])?j[key].slice():[]);
+    var ci=cur.indexOf(val);
+    if(ci>=0) cur.splice(ci,1); else cur.push(val);
+    j[key]=cur; delete j.sample; save(); return render();
   }
   if(t.dataset.jflag&&j){
     j.mflags=j.mflags||[];
