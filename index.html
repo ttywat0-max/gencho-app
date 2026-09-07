@@ -161,6 +161,8 @@ textarea{resize:vertical;min-height:56px}
   font-size:9.5px;letter-spacing:.05em;color:var(--ink-3);margin-bottom:4px}
 .rhead span:nth-child(n+2){text-align:right;padding-right:2px}
 .rhead span.c{text-align:center;padding-right:0}
+.rrow.now{background:var(--accent-soft);border-radius:8px;
+  box-shadow:0 0 0 4px var(--accent-soft)}
 .rrow{display:grid;grid-template-columns:var(--gc);gap:5px;align-items:center;margin-bottom:4px;
   padding:2px 4px;margin-left:-4px;margin-right:-4px;border-radius:7px;border:1px solid transparent}
 /* いまパッドが書き込む行。ここが分からないと上下の対応が読めない */
@@ -172,7 +174,8 @@ textarea{resize:vertical;min-height:56px}
 .rrow input[type=number]::-webkit-outer-spin-button,
 .rrow input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .rrow .o{text-align:right;font-size:13.5px;color:var(--amber)}
-.rrow .d{background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:16px;padding:0}
+.rrow .d{background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:18px;padding:0;
+  height:41px;line-height:1}
 .rrow .d:hover{color:var(--crit)}
 .hpad{margin-top:9px}
 /* 場所の欄の横の ▾ */
@@ -429,7 +432,7 @@ input.rspec{flex-basis:100%;margin-left:37px;width:auto}
 @media (max-width:480px){ .hrow button{padding:10px 0;font-size:14.5px} .hrow{gap:3px} }
 /* 行ごとの壁／天井。既定は壁で色が付いていて、天井のときだけ押す */
 .pt{display:flex;gap:2px}
-.pt button{flex:1;font-size:10.5px;padding:7px 0;border:1px solid var(--line);background:var(--surface);
+.pt button{flex:1;font-size:11.5px;padding:0;height:41px;border:1px solid var(--line);background:var(--surface);
   border-radius:5px;color:var(--ink-3);cursor:pointer;line-height:1.2}
 .pt button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);
   color:var(--accent-ink);font-weight:700}
@@ -446,7 +449,7 @@ input.rspec{flex-basis:100%;margin-left:37px;width:auto}
   .rows{padding:5px}
   .rhead,.rrow{grid-template-columns:var(--gcs,var(--gc));gap:4px}
   .rrow input{padding:6px 4px;font-size:16px}
-  .pt button{font-size:10px;padding:5px 0}
+  .pt button{font-size:11px;padding:0;height:40px}
 }
 /* クロス・床の計測 */
 .measbox{background:var(--sunken);border-radius:8px;padding:10px;margin-top:9px}
@@ -1700,7 +1703,9 @@ function startDictate(){
       save(); walkRepaint(jj); return;
     }
     V.impText=(V.impText||"")+add;
-    if(!flushImp(jj)) render();
+    /* 読み取れてもれなくても、聞こえた分は必ず画面に出す。
+       黙っていると「声が反映しない」ように見える */
+    if(!flushImp(jj)){ render(); toast("聞こえた分を窓に入れました"); }
   };
   r.onerror=function(e){
     /* 何も喋らなかっただけのときは、黙って掛け直す。いちいち知らせない */
@@ -1836,7 +1841,13 @@ function sayJump(j,hit,heard){
     if(ex) ex.rows.push(newRow(ex,ex.rows[ex.rows.length-1]));
     else j.items.push(newItem(hit.cat,p[0],p[1],p[2]));
     delete j.sample; save();
-    V.focus="it"+(j.items.length-1);
+    var si2=(j.items||[]).indexOf(ex||j.items[j.items.length-1]);
+    V.focus="it"+si2;
+    var sit=j.items[si2];
+    if(sit && !isPack(sit)){
+      if(!(sit.rows||[]).length) sit.rows=[newRow(sit,null)];
+      V.arow=[si2, sit.rows.length-1]; V.afield="h"; save();
+    }
     toast(p[0]+"を足しました");
   } else {
     toast(hit.cat+"を開きました");
@@ -2440,7 +2451,7 @@ function sendToISS(mode){
 }
 
 /* ===== 画面 ===== */
-var BUILD="2026-09-07 15:31";
+var BUILD="2026-09-07 15:35";
 var ROLE="sales";
 try{ ROLE=localStorage.getItem("genchoRole")||"sales"; }catch(e){}
 /* 営業に配る版には単価が入っていない。ISS委託者モードには切り替えられない */
@@ -2459,7 +2470,7 @@ function roleNote(){
     : '<div class="rolebar"><b>営業モード</b>　金額は表示しません。拾い出しと現場情報だけを記録します。</div>';
 }
 
-var V={view:"home",job:null,tab:"info",cat:null,focus:null,arow:null,allplace:null,moreplace:null,rooms:false,imp:null,impText:"",impGot:0,saybox:false,sayText:"",impItem:null,impBox:{},
+var V={view:"home",job:null,tab:"info",cat:null,focus:null,arow:null,allplace:null,moreplace:null,rooms:false,imp:null,impText:"",impGot:0,saybox:false,sayText:"",impItem:null,impBox:{},guide:null,pic:null,more:null,
        walkPlace:null,walkCat:null,walkItem:null,walkType:false,walkText:""};
 /* 聞き取り中の装置。喋りっぱなしにできるよう、止めるまで持っておく */
 var SAY_REC=null, SAY_WANT=false;
@@ -2678,7 +2689,7 @@ function home(){
     +'　工種は実際の見積明細から整理した17工種101項目です。入力内容はこの端末の中だけに保存されます（試作のため）。'
     /* 共有リンクは古い版に固定されることがある。どの版を見ているか分かるように出す */
     +'<br><span style="color:var(--ink-3);font-size:11.5px">このアプリの更新　'
-    +'<b class="num">2026-09-07 15:31</b>　'
+    +'<b class="num">2026-09-07 15:35</b>　'
     +'（画面が古いと思ったら、ここの日時を教えてください）</span></p>'
     +'<button class="btn danger sm" data-reset style="margin-top:8px">サンプルの状態に戻す</button>';
   app.innerHTML=h;
@@ -3294,15 +3305,22 @@ function koushuView(){
   h+='<div class="card"><div class="card-h"><h2>'+esc(cat)+'</h2>'
     +'</div><div class="card-b">';
 
+  /* 項目は9個も10個もある。全部出すとカードの上半分が埋まる。
+     よく出る4つだけ出して、あとは押したら開く */
+  var all=KOUSHU[cat].i.filter(function(x){ return !replacedByPack(cat,x[0]); });
+  var few=V.more===cat ? all : all.slice(0,4);
   h+='<div class="addwrap"><div class="addchips">'
-    + KOUSHU[cat].i.filter(function(x){ return !replacedByPack(cat,x[0]); })
-        .map(function(x){
+    + few.map(function(x){
         return '<button data-add="'+esc(x[0])+'">＋'+esc(x[0])
           +(x[3]?'<span class="n">'+x[3]+'</span>':'<span class="n">新</span>')+'</button>'; }).join("")
-    + Object.keys(PACKS).filter(function(k){ return PACKS[k].cat===V.cat; })
-        .map(function(k){ return '<button class="pkadd" data-addpack="'+esc(k)+'">＋ '+esc(k)
-          +'<span class="n">まとめて</span></button>'; }).join("")
-    +'<button class="free" data-addfree>＋ 自由に入力</button></div></div>';
+    + (V.more===cat
+        ? Object.keys(PACKS).filter(function(k){ return PACKS[k].cat===V.cat; })
+            .map(function(k){ return '<button class="pkadd" data-addpack="'+esc(k)+'">＋ '+esc(k)
+              +'<span class="n">まとめて</span></button>'; }).join("")
+          +'<button class="free" data-addfree>＋ 自由に入力</button>'
+          +'<button class="free" data-more="">閉じる</button>'
+        : '<button class="free" data-more="'+esc(cat)+'">ほか'+(all.length-few.length)+'件…</button>')
+    +'</div></div>';
   /* 声は、項目チップに紛れさせない。押す物として立てる */
   var catOn = (SAY_REC && V.impItem==null);
   h+='<button class="voicebar'+(catOn?" on":"")+'" '+(catOn?'data-impstop':'data-sayall')+'>'
@@ -3311,8 +3329,8 @@ function koushuView(){
     +'<small>'+(catOn
        ? '工事名・場所・数を続けて言ってください。押し直しは要りません'
        : '「クロス 玄関 壁 2.4が2本」のように言うだけ。押し直しは要りません')+'</small></span></button>';
-  h+='<button class="btn ghost wide sm" data-imp style="margin:-4px 0 12px">'
-    +'メモから貼る／打って入れる</button>';
+  h+='<button class="btn ghost wide sm" data-imp style="margin:-6px 0 12px;padding:6px">'
+    +'声が使えないときは、ここに打つ／メモから貼る</button>';
   if(V.imp===cat && V.impItem==null) h+=impBox(null);
 
   if(!list.length) h+='<div class="empty">上のボタンを押すと、行が増えます。</div>';
@@ -3330,10 +3348,13 @@ function koushuView(){
       +'aria-label="'+esc(it.name)+'を声で足す" title="声で足す">'
       +'<span class="d">'+(micOn?'■':'●')+'</span>'
       +(micOn?'止める':'声')+'</button>'
+      +(meas?'<button class="helpbtn" data-guide="'+idx+'" title="測り方">'
+             +(V.guide===idx?'×':'測り方')+'</button>':'')
       +(m2?'<button class="helpbtn" data-help="'+esc(it.name)+'">?</button>':'')
       +'<button class="x" data-del="'+idx+'" aria-label="削除">×</button></div>';
 
-    if(meas){
+    /* 測り方の説明は毎回は要らない。忘れたときに ? で出す */
+    if(meas && V.guide===idx){
       h+='<div class="guide" style="margin-top:8px">'+(cloth
           ? '<b>壁</b>：巾0.9ｍを<b>1本</b>として本数を数えます。サッシ・扉の上下は別行に。'
             +'<b>梁は幅0.9ｍ以下なら、面積ではなく梁の長さで拾います</b>（材料として取るため）。<br>'
@@ -3358,7 +3379,8 @@ function koushuView(){
           : '<span>数量</span><span></span>')
       +'<span>'+(meas?'㎡':esc(it.unit))+'</span><span></span></div>';
     (it.rows||[]).forEach(function(r,ri){
-      h+='<div class="rrow" data-row="'+idx+'|'+ri+'">'
+      var isNow = (V.arow && V.arow[0]===idx && V.arow[1]===ri);
+      h+='<div class="rrow'+(isNow?' now':'')+'" data-row="'+idx+'|'+ri+'">'
         +'<span class="pcell">'
         +'<input type="text" value="'+esc(r.place||"")+'" data-r="place" data-i="'+idx+'" data-ri="'+ri+'"'
         + ' placeholder="'+(ri>0?esc(carryPlace(it,ri)||"どこを測ったか"):"どこを測ったか")+'">'
@@ -3384,7 +3406,14 @@ function koushuView(){
     });
     /* 場所も規格・仕様も、いま触っている行のものを、この1か所で選ぶ。
        項目まるごとで1つだと、LDKは自動洗浄あり・洋室はなし、が書けない。 */
+    /* 場所チップも数字パッドも、いま打っている行のためのもの。
+       打っていない項目に出しておくから、画面が埋まっていた */
+    var active = (V.arow && V.arow[0]===idx);
     var scs=specChipsFor(it.name, cat);
+    if(!active){
+      h+='<button class="btn ghost wide sm" data-pick="'+idx+'" style="margin-top:7px">'
+        +'この工事を打つ</button>';
+    } else {
     h+='<div class="hpad">'
       +'<div class="padwho"></div>'
       +'<div class="pickrow placepick"><span class="plab">場所</span><span class="pchips">'
@@ -3431,10 +3460,12 @@ function koushuView(){
     }
     h+='</div>';
     h+='<button class="btn ghost wide sm" data-addrow="'+idx+'" style="margin-top:6px">＋ 行を足す</button>';
+    }
     /* 床を張ると、既存の床との間に段差（チリ）が出る。
        見切り金物を入れるかどうかは、その場でしか判断できない。
        質問はしない。押せば足りるものを、隣に置いておくだけ */
-    if(/CF|フロアタイル|長尺|タイルカーペット|カーペット|フローリング/.test(it.name)){
+    if(/CF|フロアタイル|長尺|タイルカーペット|カーペット|フローリング/.test(it.name)
+       && (it.rows||[]).some(function(r){ return (+r.h&&+r.n)||+r.qty; })){
       var kiri=null;
       (j.items||[]).forEach(function(x){ if(x.name==="見切り金物取付") kiri=x; });
       h+='<div class="chiri">'
@@ -3449,8 +3480,11 @@ function koushuView(){
               :'<span class="q2">押すと雑工事に足します。声でも「への字 シルバー」で入ります。</span>')
         +'</div>';
     }
-    /* その工事の現物を撮る。品番が読めない物ほど、写真が効く */
-    h+=picStrip(j.id, picTagItem(cat,it.name), "この工事の写真");
+    /* 写真も、要るときだけ開く。並べておくと場所を食う */
+    var ptag=picTagItem(cat,it.name), pn=picCount(j.id,ptag);
+    if(V.pic===idx || pn) h+=picStrip(j.id, ptag, "この工事の写真");
+    else h+='<button class="btn ghost wide sm" data-picopenbox="'+idx+'" '
+      +'style="margin-top:6px">📷 この工事の写真</button>';
     if(V.impItem===idx) h+=impBox(it.name);
     h+='<div class="rtotal">合計 <b class="num">'+fmt(qtyOf(it),decUnit(it.unit)?2:0)+'</b> '+esc(it.unit)+'</div>';
     h+='</div>';
@@ -3831,7 +3865,7 @@ document.addEventListener("keydown",function(e){
 /* ---------- 操作 ---------- */
 document.addEventListener("click",function(e){
   var t=e.target.closest("[data-open],[data-new],[data-reset],[data-back],[data-tab],[data-cat],[data-go],"
-    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-ack],[data-kiri],[data-acflag],[data-setf],[data-spec],"
+    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-ack],[data-kiri],[data-guide],[data-picopenbox],[data-more],[data-pick],[data-acflag],[data-setf],[data-spec],"
     +"[data-addroom],[data-delroom],[data-openrooms],[data-adde],[data-dele],[data-adds],[data-dels],[data-help],[data-send],"
     +"[data-keyset],[data-keydel],[data-keyadd],[data-place],[data-allplace],[data-pdrop],[data-moreplace],[data-rsc],[data-rpart],[data-hi],[data-hd],[data-nq],[data-nadd],[data-dir],[data-loss],[data-grip],[data-tile],[data-eqo],[data-pk],[data-pko],[data-pks],[data-pkg],[data-pkdz],[data-pkp],[data-addpack],[data-say],[data-imp],[data-impflush],[data-impclose],[data-addrow],[data-delrow],[data-sayit],[data-impstop],[data-saybox],[data-sayword],[data-picopen],[data-picclose],[data-picdel],[data-walkgo],[data-go],[data-walktypeon],[data-walktypeoff],[data-walkflush],[data-sayall]");
   if(!t) return;
@@ -3957,7 +3991,14 @@ document.addEventListener("click",function(e){
       j.items.push(ni);
     }
     delete j.sample; save();
-    V.focus="it"+(j.items||[]).indexOf(exist||j.items[j.items.length-1]);
+    var ai=(j.items||[]).indexOf(exist||j.items[j.items.length-1]);
+    V.focus="it"+ai;
+    /* 足した直後は、そのまま打てる状態にする。もう一度押させない */
+    var ait=j.items[ai];
+    if(ait && !isPack(ait)){
+      if(!(ait.rows||[]).length) ait.rows=[newRow(ait,null)];
+      V.arow=[ai, ait.rows.length-1]; V.afield="h"; save();
+    }
     return render();
   }
   if(t.hasAttribute("data-addfree")&&j){
@@ -3994,6 +4035,7 @@ document.addEventListener("click",function(e){
     return;
   }
   if(t.dataset.addrow!=null&&j){
+    V.afield="h";
     var ai=+t.dataset.addrow, arit=j.items[ai];
     // 場所・壁天井・高さは前の行から引き継ぎ、本数だけ空。変わるのは本数だけだから
     arit.rows.push(newRow(arit, arit.rows[arit.rows.length-1]));
@@ -4059,6 +4101,20 @@ document.addEventListener("click",function(e){
     delete j.sample; save(); return render();
   }
   /* 部屋ごとの種別。押すたびに入り、もう一度押すと外れる */
+  if(t.dataset.guide!=null){
+    V.guide = (V.guide===+t.dataset.guide) ? null : +t.dataset.guide; return render();
+  }
+  if(t.dataset.picopenbox!=null){ V.pic=+t.dataset.picopenbox; return render(); }
+  if(t.dataset.more!=null){ V.more = t.dataset.more || null; return render(); }
+  /* この工事を打つ——場所チップも数字パッドも、ここで初めて出す */
+  if(t.dataset.pick!=null&&j){
+    var pi=+t.dataset.pick, pit=j.items[pi];
+    if(pit){
+      if(!(pit.rows||[]).length){ pit.rows=[newRow(pit,null)]; save(); }
+      V.arow=[pi, pit.rows.length-1]; V.afield="h";
+    }
+    return render();
+  }
   if(t.dataset.ack&&j){
     var kp2=t.dataset.ack.split("|"), rm2=kp2[0], kind=kp2[1];
     var c2=acCell(j,rm2);
