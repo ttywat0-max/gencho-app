@@ -1,6 +1,6 @@
 /* 現調ノート。一度開けば圏外でも開ける。
    版が変わったら古いものを捨てて入れ替える */
-var CACHE = "gencho-d404574e";
+var CACHE = "gencho-18f94cc1";
 var FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
 self.addEventListener("install", function(e){
   self.skipWaiting();

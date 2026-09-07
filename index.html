@@ -313,6 +313,9 @@ input.rspec{flex-basis:100%;margin-left:37px;width:auto}
 .acb:disabled{color:var(--line);cursor:default}
 .acrow.on .acb{border-color:var(--accent);color:var(--accent)}
 
+.ackind{padding:2px 0 10px 2px;display:flex;flex-direction:column;gap:4px;
+  border-bottom:1px solid var(--line-soft);margin-bottom:2px}
+.acrow{border-bottom:0}
 .voicebar{display:flex;align-items:center;gap:12px;width:100%;margin:2px 0 10px;
   padding:13px 15px;border-radius:12px;border:2px solid var(--accent);
   background:var(--surface);cursor:pointer;text-align:left;min-height:62px}
@@ -1263,7 +1266,8 @@ var ATTR = [
   "コの字","ロの字","一本引き","打ち替え","増し打ち","三面","二面",
   "変成シリコン","シリコン","ウレタン","防カビ","防水","抗菌","防臭","耐水",
   /* 付き方の呼び分け。物そのものの名前はここに入れない（工事として拾う） */
-  "壁付","台付","据置","壁掛け","天井埋込","露出","隠ぺい"
+  "壁付","台付","据置","壁掛け","天井カセット","天井埋込","床置き","窓用",
+  "マルチ室内機","マルチ","自動洗浄あり","自動洗浄なし","露出","隠ぺい"
 ];
 var ATTR_RE = new RegExp("^(?:" + ATTR.join("|") + ")$");
 /* その行が、属性の言葉だけでできているか。
@@ -1480,7 +1484,8 @@ function walkHead(j){
     {k:"power",   l:"通電",       v:j.power||"",
      say:"「電気きてる」「通電なし」"},
     {k:"ac",      l:"エアコン",
-     v:acTotal(j) ? acList(j).map(function(x){return x.place+" "+x.n+"台";}).join(" ／ ") : "",
+     v:acTotal(j) ? acList(j).map(function(x){
+         return x.place+" "+x.n+"台"+(x.spec?"（"+x.spec+"）":"");}).join(" ／ ") : "",
      say:"「洋室1にエアコン1台」"}
   ];
 }
@@ -1540,8 +1545,19 @@ function walkHeadHeard(j,t){
     (j.rooms||[]).forEach(function(x){ if(s2.indexOf(x.replace(/\s/g,""))>=0) rm=x; });
     rm = rm || V.walkPlace;
     if(rm){
-      j.acRooms=j.acRooms||{}; j.acRooms[rm]=+acm[1]; j.ac=acTotal(j);
-      return "エアコン：" + rm + " " + acm[1] + "台（合計" + acTotal(j) + "台）";
+      var cc=acCell(j,rm); cc.n=+acm[1];
+      /* 「洋室1にエアコン1台 天井カセット 自動洗浄あり」——種別も同じ息で言える */
+      AC_KIND.concat(AC_WASH).forEach(function(k){
+        if(s2.indexOf(k)>=0 && cc.t.indexOf(k)<0){
+          var grp=(AC_KIND.indexOf(k)>=0)?AC_KIND:AC_WASH;
+          cc.t=cc.t.filter(function(x){ return grp.indexOf(x)<0; });
+          cc.t.push(k);
+        }
+      });
+      acSet(j,rm,cc);
+      return "エアコン：" + rm + " " + cc.n + "台"
+        + (cc.t.length?"（"+cc.t.join("・")+"）":"")
+        + "　合計" + acTotal(j) + "台";
     }
     return "どの部屋のエアコンか分かりません：" + s2;
   }
@@ -2271,7 +2287,8 @@ function buildPayload(j){
     職人指定:j.shokunin||"",注意事項:j.caution||"",
     物件名:j.name||"",住所:j.addr||"",間取り:madoriText(j),工事申請:j.apply||"",
     駐車場:(j.parking||"")+(j.parkingMemo?"（"+j.parkingMemo+"）":""),鍵場所:j.key||"",エアコン台数:acTotal(j)||"",
-    エアコン内訳:acList(j).map(function(x){return x.place+" "+x.n+"台";}).join("・"),
+    エアコン内訳:acList(j).map(function(x){
+      return x.place+" "+x.n+"台"+(x.spec?"（"+x.spec+"）":"");}).join("・"),
     エアコン備考:((j.acFlags||[]).join("・")+" "+(j.acMemo||"")).trim(),ISS伝達メモ:j.issMemo||"",
     自由記入:j.freeMemo||"",現調日:j.date||"",送信元:"gencho-note",
     拾い出し:rows,
@@ -2423,7 +2440,7 @@ function sendToISS(mode){
 }
 
 /* ===== 画面 ===== */
-var BUILD="2026-09-07 15:02";
+var BUILD="2026-09-07 15:31";
 var ROLE="sales";
 try{ ROLE=localStorage.getItem("genchoRole")||"sales"; }catch(e){}
 /* 営業に配る版には単価が入っていない。ISS委託者モードには切り替えられない */
@@ -2661,7 +2678,7 @@ function home(){
     +'　工種は実際の見積明細から整理した17工種101項目です。入力内容はこの端末の中だけに保存されます（試作のため）。'
     /* 共有リンクは古い版に固定されることがある。どの版を見ているか分かるように出す */
     +'<br><span style="color:var(--ink-3);font-size:11.5px">このアプリの更新　'
-    +'<b class="num">2026-09-07 15:02</b>　'
+    +'<b class="num">2026-09-07 15:31</b>　'
     +'（画面が古いと思ったら、ここの日時を教えてください）</span></p>'
     +'<button class="btn danger sm" data-reset style="margin-top:8px">サンプルの状態に戻す</button>';
   app.innerHTML=h;
@@ -2691,17 +2708,40 @@ function delivList(j){
 /* エアコンは部屋ごとに付いている。「洋室に5台」ではなく
    「洋室1に1台、LDKに1台」。洗浄も交換も部屋ごとに出るので、
    最初からそう数える */
+/* 1部屋ぶんの中身。台数だけを持っていた古い形も読めるようにしておく */
+function acCell(j,rm){
+  var m=(j&&j.acRooms)||{}, v=m[rm];
+  if(v==null) return {n:0,t:[]};
+  if(typeof v==="number") return {n:v,t:[]};
+  return {n:+v.n||0, t:(v.t||[]).slice()};
+}
+function acSet(j,rm,cell){
+  j.acRooms=j.acRooms||{};
+  if(cell.n<=0) delete j.acRooms[rm];
+  else j.acRooms[rm]={n:cell.n, t:cell.t||[]};
+  j.ac=acTotal(j);
+}
 function acRooms(j){ return (j&&j.acRooms) || {}; }
 function acTotal(j){
   var m=acRooms(j), n=0;
-  for(var k in m) n += (+m[k]||0);
+  for(var k in m) n += acCell(j,k).n;
   return n;
+}
+/* 種別。ここが値段を決める。壁掛けと天井カセットでは倍以上ちがう */
+var AC_KIND=["壁掛け","天井カセット","天井埋込","床置き","窓用","マルチ室内機"];
+var AC_WASH=["自動洗浄あり","自動洗浄なし"];
+function acLabel(c){
+  return c.t.length ? c.t.join("・") : "";
 }
 /* エアコンが付いている部屋を、台数つきで並べる */
 function acList(j){
-  var m=acRooms(j), out=[];
-  (j.rooms||[]).forEach(function(rm){ if(+m[rm]>0) out.push({place:rm, n:+m[rm]}); });
-  for(var k in m) if(+m[k]>0 && (j.rooms||[]).indexOf(k)<0) out.push({place:k, n:+m[k]});
+  var m=acRooms(j), out=[], seen={};
+  function push(rm){
+    var c=acCell(j,rm);
+    if(c.n>0 && !seen[rm]){ seen[rm]=1; out.push({place:rm, n:c.n, t:c.t, spec:acLabel(c)}); }
+  }
+  (j.rooms||[]).forEach(push);
+  for(var k in m) push(k);
   return out;
 }
 /* エアコンが付きうる部屋。玄関や浴室には普通付かないので出さない */
@@ -2756,11 +2796,24 @@ function infoTab(j){
     +'<div class="field"><label>エアコン</label>'
     +'<div class="acgrid">'
     + acPlaces(j).map(function(rm){
-        var n=+acRooms(j)[rm]||0;
-        return '<div class="acrow'+(n?' on':'')+'"><span class="p">'+esc(rm)+'</span>'
+        var c=acCell(j,rm), n=c.n;
+        var h2='<div class="acrow'+(n?' on':'')+'"><span class="p">'+esc(rm)+'</span>'
           +'<button class="acb" data-acn="'+esc(rm)+'|-1"'+(n?'':' disabled')+'>−</button>'
           +'<span class="n num">'+n+'</span>'
           +'<button class="acb" data-acn="'+esc(rm)+'|1">＋</button></div>';
+        /* 台数が入った部屋だけ、種別を聞く。ここが洗浄の値段を決める */
+        if(n){
+          h2+='<div class="ackind"><div class="chips sm">'
+            + AC_KIND.map(function(k){
+                return '<button data-ack="'+esc(rm)+'|'+esc(k)+'" aria-pressed="'
+                  +(c.t.indexOf(k)>=0)+'">'+esc(k)+'</button>'; }).join("")
+            +'</div><div class="chips sm">'
+            + AC_WASH.map(function(k){
+                return '<button data-ack="'+esc(rm)+'|'+esc(k)+'" aria-pressed="'
+                  +(c.t.indexOf(k)>=0)+'">'+esc(k)+'</button>'; }).join("")
+            +'</div></div>';
+        }
+        return h2;
       }).join("")
     +'</div>'
     +'<div class="chips sm" style="margin-top:6px">'
@@ -2768,7 +2821,9 @@ function infoTab(j){
         .map(function(k){ return '<button data-acadd="'+esc(k)+'">＋'+esc(k)+'</button>'; }).join("")
     +'</div>'
     +'<div class="note" style="margin-top:5px">合計 <b class="num">'+acTotal(j)+'台</b>'
-    +(acTotal(j)?'　'+acList(j).map(function(x){return esc(x.place)+' '+x.n+'台';}).join(' ／ '):'')
+    +(acTotal(j)?'　'+acList(j).map(function(x){
+        return esc(x.place)+' '+x.n+'台'+(x.spec?'（'+esc(x.spec)+'）':'');
+      }).join(' ／ '):'')
     +'</div>'
     /* 台数を選ぶ前から出す。現場では先に本体を見て、あとから数えることもある */
     +'<div class="chips" style="margin-top:5px">'
@@ -3776,7 +3831,7 @@ document.addEventListener("keydown",function(e){
 /* ---------- 操作 ---------- */
 document.addEventListener("click",function(e){
   var t=e.target.closest("[data-open],[data-new],[data-reset],[data-back],[data-tab],[data-cat],[data-go],"
-    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-kiri],[data-acflag],[data-setf],[data-spec],"
+    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-ack],[data-kiri],[data-acflag],[data-setf],[data-spec],"
     +"[data-addroom],[data-delroom],[data-openrooms],[data-adde],[data-dele],[data-adds],[data-dels],[data-help],[data-send],"
     +"[data-keyset],[data-keydel],[data-keyadd],[data-place],[data-allplace],[data-pdrop],[data-moreplace],[data-rsc],[data-rpart],[data-hi],[data-hd],[data-nq],[data-nadd],[data-dir],[data-loss],[data-grip],[data-tile],[data-eqo],[data-pk],[data-pko],[data-pks],[data-pkg],[data-pkdz],[data-pkp],[data-addpack],[data-say],[data-imp],[data-impflush],[data-impclose],[data-addrow],[data-delrow],[data-sayit],[data-impstop],[data-saybox],[data-sayword],[data-picopen],[data-picclose],[data-picdel],[data-walkgo],[data-go],[data-walktypeon],[data-walktypeoff],[data-walkflush],[data-sayall]");
   if(!t) return;
@@ -3888,12 +3943,10 @@ document.addEventListener("click",function(e){
       var ni=newItem(V.cat,p[0],p[1],p[2]);
       /* 基本情報で分かっていることは、そのまま持ってくる。同じことを2回打たせない */
       if(/エアコン/.test(p[0]) && acTotal(j)>0){
-        /* 基本情報で「どの部屋に何台」と数えてあるので、そのまま行にする。
-           1行にまとめると、洋室に5台のような読めない形になる */
-        var af=(j.acFlags||[]).filter(function(x){ return x.indexOf("自動洗浄")===0; });
-        var sp0=af.length ? ((af[0]==="自動洗浄あり")?"自動洗浄機能付き":"壁掛け通常") : "";
+        /* 基本情報で「どの部屋に何台・どんな種別か」まで数えてある。
+           種別で洗浄の値段が倍以上ちがうので、行ごとにそのまま持たせる */
         ni.rows=acList(j).map(function(x){
-          return {place:x.place, qty:x.n, spec:sp0};
+          return {place:x.place, qty:x.n, spec:x.spec||""};
         });
       }
       /* ルームクリーニングは間取りで単価が決まる。基本情報で選んだ間取りを入れておく */
@@ -4000,15 +4053,29 @@ document.addEventListener("click",function(e){
   if(t.dataset.acn&&j){
     var ap=t.dataset.acn.split("|"), rm=ap[0], d=+ap[1];
     j.acRooms=j.acRooms||{};
-    var v=(+j.acRooms[rm]||0)+d;
-    if(v<=0) delete j.acRooms[rm]; else j.acRooms[rm]=Math.min(v,9);
-    j.ac=acTotal(j);
+    var c3=acCell(j,rm);
+    c3.n=Math.min(Math.max(c3.n+d,0),9);
+    acSet(j,rm,c3);
     delete j.sample; save(); return render();
+  }
+  /* 部屋ごとの種別。押すたびに入り、もう一度押すと外れる */
+  if(t.dataset.ack&&j){
+    var kp2=t.dataset.ack.split("|"), rm2=kp2[0], kind=kp2[1];
+    var c2=acCell(j,rm2);
+    var ki2=c2.t.indexOf(kind);
+    if(ki2>=0) c2.t.splice(ki2,1);
+    else {
+      /* 形は1つだけ、洗浄の有無も1つだけ。同じ組の別の答えは外す */
+      var grp = (AC_KIND.indexOf(kind)>=0) ? AC_KIND : AC_WASH;
+      c2.t = c2.t.filter(function(x){ return grp.indexOf(x)<0; });
+      c2.t.push(kind);
+    }
+    acSet(j,rm2,c2); delete j.sample; save(); return render();
   }
   if(t.dataset.acadd&&j){
     j.acRooms=j.acRooms||{};
-    if(!j.acRooms[t.dataset.acadd]) j.acRooms[t.dataset.acadd]=1;
-    j.ac=acTotal(j); delete j.sample; save(); return render();
+    if(!j.acRooms[t.dataset.acadd]) acSet(j,t.dataset.acadd,{n:1,t:[]});
+    delete j.sample; save(); return render();
   }
   if(t.dataset.jmulti&&j){
     var mp=t.dataset.jmulti.split("|"), key=mp[0], val=mp[1];
