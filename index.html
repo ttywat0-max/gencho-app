@@ -258,6 +258,21 @@ input.rspec{flex-basis:100%;margin-left:37px;width:auto}
 .picthumb img{width:100%;height:100%;object-fit:cover;display:block}
 .shotrow{border-bottom:1px solid var(--line-soft);padding:2px 0 8px}
 .shotrow:last-child{border-bottom:0}
+#fbbox{display:none}
+#fbbox[open]{display:flex;position:fixed;inset:0;z-index:95;align-items:flex-end;
+  justify-content:center;background:rgba(8,12,16,.5)}
+.fb-in{background:var(--surface);width:100%;max-width:560px;border-radius:14px 14px 0 0;
+  padding:16px 16px 22px;display:flex;flex-direction:column;gap:10px;max-height:88vh;overflow:auto}
+.fb-h{display:flex;align-items:center;gap:10px}
+.fb-h b{font-size:16px;font-weight:700}
+.fb-x{margin-left:auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+  border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;min-height:38px}
+.fb-n{margin:0;font-size:12.5px;color:var(--ink-2);line-height:1.75}
+.fb-in textarea{width:100%;font-size:16px;padding:11px;border-radius:9px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);font-family:inherit;line-height:1.7}
+.fb-b{display:flex;gap:8px}
+.fb-b .btn{flex:1}
+.fb-s{font-size:13px;line-height:1.7}
 #picview{display:none}
 #picview[open]{display:flex;position:fixed;inset:0;z-index:90;flex-direction:column;
   background:rgba(8,12,16,.94)}
@@ -2451,7 +2466,7 @@ function sendToISS(mode){
 }
 
 /* ===== 画面 ===== */
-var BUILD="2026-09-07 15:35";
+var BUILD="2026-09-07 17:51";
 var ROLE="sales";
 try{ ROLE=localStorage.getItem("genchoRole")||"sales"; }catch(e){}
 /* 営業に配る版には単価が入っていない。ISS委託者モードには切り替えられない */
@@ -2689,8 +2704,10 @@ function home(){
     +'　工種は実際の見積明細から整理した17工種101項目です。入力内容はこの端末の中だけに保存されます（試作のため）。'
     /* 共有リンクは古い版に固定されることがある。どの版を見ているか分かるように出す */
     +'<br><span style="color:var(--ink-3);font-size:11.5px">このアプリの更新　'
-    +'<b class="num">2026-09-07 15:35</b>　'
+    +'<b class="num">2026-09-07 17:51</b>　'
     +'（画面が古いと思ったら、ここの日時を教えてください）</span></p>'
+    +'<button class="btn ghost wide sm" data-fb style="margin-top:8px">'
+    +'気づいたことを書く（触ってみた感想）</button>'
     +'<button class="btn danger sm" data-reset style="margin-top:8px">サンプルの状態に戻す</button>';
   app.innerHTML=h;
 }
@@ -3293,6 +3310,7 @@ function walkTab(j){
     +'<div id="wkTail">'+walkTailHTML(j)+'</div>';
 
   h+='<button class="btn ghost wide sm" data-tab="items">工種ごとに見直す</button>';
+  h+='<button class="btn ghost wide sm" data-fb style="margin-top:6px">気づいたことを書く</button>';
   return h;
 }
 
@@ -3509,6 +3527,7 @@ function koushuView(){
   }
   h+='</div></div>';
   if(man) h+='<button class="btn ghost wide sm" data-help="'+esc(man.t)+'">'+esc(man.t)+'の調査手順を見る</button>';
+  h+='<button class="btn ghost wide sm" data-fb style="margin-top:6px">この画面について、気づいたことを書く</button>';
   return app.innerHTML=h;
 }
 
@@ -3813,6 +3832,52 @@ function sumView(){
 function cr(k,v){ return '<div class="calcrow"><span class="k">'+k+'</span><span class="v num">'+v+'</span></div>'; }
 
 /* ---------- 下部バー ---------- */
+/* いまどの画面を見ているか。気づいたことに添える */
+function whereNow(){
+  var j=J();
+  if(V.view==="home") return "現調一覧";
+  if(V.view==="koushu") return "工種：" + (V.cat||"");
+  if(V.view==="sum")   return "ISSへ依頼";
+  var tabs={info:"基本",walk:"歩く",items:"工種の一覧",equip:"設備",issue:"要確認",photo:"写真"};
+  return (tabs[V.tab]||V.tab) + (j&&j.name?"（"+j.name+"）":"");
+}
+/* 気づいたことを書く窓。書いたらコピーして、チャットワークに貼るだけ */
+function fbOpen(){
+  var w=document.getElementById("fbbox");
+  if(!w){ w=document.createElement("div"); w.id="fbbox"; document.body.appendChild(w); }
+  w.innerHTML='<div class="fb-in">'
+    +'<div class="fb-h"><b>気づいたことを書く</b>'
+    +'<button class="fb-x" data-fbclose>閉じる</button></div>'
+    +'<p class="fb-n">思ったことを、そのまま書いてください。'
+    +'直したほうがいい所でも、分かりにくい所でも、ここが良かったでも構いません。<br>'
+    +'<b>版と画面はこちらで入れます。</b>書いたら「コピー」を押して、チャットワークに貼ってください。</p>'
+    +'<textarea id="fbtx" rows="6" placeholder="例：クロスの行で、壁と天井のどっちを打っているのか分かりにくい"></textarea>'
+    +'<div class="fb-b">'
+    +'<button class="btn" data-fbcopy>コピーする</button>'
+    +'<button class="btn ghost" data-fbclose>やめる</button>'
+    +'</div><div class="fb-s" id="fbs"></div></div>';
+  w.setAttribute("open","");
+  var tx=document.getElementById("fbtx");
+  if(tx) tx.focus();
+}
+function fbClose(){
+  var w=document.getElementById("fbbox");
+  if(w){ w.removeAttribute("open"); w.innerHTML=""; }
+}
+function fbText(){
+  var tx=document.getElementById("fbtx");
+  var body=(tx&&tx.value||"").trim();
+  var ua=navigator.userAgent;
+  var dev=/iPhone/.test(ua)?"iPhone":/iPad/.test(ua)?"iPad":/Android/.test(ua)?"Android":"パソコン";
+  var mic=(window.SpeechRecognition||window.webkitSpeechRecognition)?"あり":"なし";
+  return "【現調ノート　気づいたこと】" + NL
+    + body + NL + NL
+    + "── 以下は自動 ──" + NL
+    + "画面：" + whereNow() + NL
+    + "版　：" + BUILD + NL
+    + "端末：" + dev + "／マイクの仕組み " + mic
+    + (PWA.standalone ? "／ホーム画面から起動" : "／ブラウザで表示");
+}
 function dock(){
   var d=document.getElementById("dock"), di=document.getElementById("dockIn"), j=J();
   if(V.view==="home"||!j){ d.hidden=true; return; }
@@ -3865,7 +3930,7 @@ document.addEventListener("keydown",function(e){
 /* ---------- 操作 ---------- */
 document.addEventListener("click",function(e){
   var t=e.target.closest("[data-open],[data-new],[data-reset],[data-back],[data-tab],[data-cat],[data-go],"
-    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-ack],[data-kiri],[data-guide],[data-picopenbox],[data-more],[data-pick],[data-acflag],[data-setf],[data-spec],"
+    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-ack],[data-kiri],[data-guide],[data-picopenbox],[data-more],[data-pick],[data-fb],[data-fbclose],[data-fbcopy],[data-acflag],[data-setf],[data-spec],"
     +"[data-addroom],[data-delroom],[data-openrooms],[data-adde],[data-dele],[data-adds],[data-dels],[data-help],[data-send],"
     +"[data-keyset],[data-keydel],[data-keyadd],[data-place],[data-allplace],[data-pdrop],[data-moreplace],[data-rsc],[data-rpart],[data-hi],[data-hd],[data-nq],[data-nadd],[data-dir],[data-loss],[data-grip],[data-tile],[data-eqo],[data-pk],[data-pko],[data-pks],[data-pkg],[data-pkdz],[data-pkp],[data-addpack],[data-say],[data-imp],[data-impflush],[data-impclose],[data-addrow],[data-delrow],[data-sayit],[data-impstop],[data-saybox],[data-sayword],[data-picopen],[data-picclose],[data-picdel],[data-walkgo],[data-go],[data-walktypeon],[data-walktypeoff],[data-walkflush],[data-sayall]");
   if(!t) return;
@@ -4101,6 +4166,21 @@ document.addEventListener("click",function(e){
     delete j.sample; save(); return render();
   }
   /* 部屋ごとの種別。押すたびに入り、もう一度押すと外れる */
+  if(t.hasAttribute("data-fb")){ fbOpen(); return; }
+  if(t.hasAttribute("data-fbclose")){ fbClose(); return; }
+  if(t.hasAttribute("data-fbcopy")){
+    var txt=fbText(), s2=document.getElementById("fbs");
+    function done(ok){
+      if(s2) s2.innerHTML = ok
+        ? '<b class="ok">コピーしました。チャットワークに貼ってください。</b>'
+        : '<b>コピーできませんでした。下の文を長押しして選んでください。</b>'
+          +'<textarea rows="7" readonly style="margin-top:7px">'+esc(txt)+'</textarea>';
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){ done(true); },function(){ done(false); });
+    } else done(false);
+    return;
+  }
   if(t.dataset.guide!=null){
     V.guide = (V.guide===+t.dataset.guide) ? null : +t.dataset.guide; return render();
   }
