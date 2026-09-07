@@ -1288,6 +1288,8 @@ var ATTR = [
   "マルチ室内機","マルチ","自動洗浄あり","自動洗浄なし","露出","隠ぺい"
 ];
 var ATTR_RE = new RegExp("^(?:" + ATTR.join("|") + ")$");
+/* 間取りは数字が入るが、数量ではない。ルームクリーニングの規格・仕様になる */
+var MADORI_RE = /^([1-9１-９]\s*(?:R|K|DK|LDK|SLDK|SDK))$|^(ワンルーム|ワンK)$/i;
 /* その行が、属性の言葉だけでできているか。
    「への字シルバー」「への字 シルバー」「への字のシルバー」どれも拾う */
 function attrOnly(t){
@@ -1419,15 +1421,40 @@ function sayPlace(t,upto){
     var keep=toks.map(placeToken).filter(function(x){return x;});
     if(keep.length) return keep.join(" ");
   }
+  /* 場所として残ったのが数字だけなら、場所は無かったことにする。
+     数字が場所欄に入るくらいなら、空のほうがいい */
+  if(/^[0-9０-９.．,、\s]*$/.test(head)) return "";
   return head;
 }
 /* その語は場所か。「洋室1」は洋室の続き。「ゲンカン」は玄関に寄せる */
 function placeToken(w){
   if(!w) return null;
+  /* 数字だけの言葉は場所ではない。「2.5」が場所に入っていた */
+  if(/^[0-9０-９.．,、]+$/.test(w)) return null;
   var pl=VOCAB_SRC.place||[];
   for(var i=0;i<pl.length;i++) if(pl[i].length>=2 && w.indexOf(pl[i])===0) return w;
   var lim = w.length>=6 ? 2 : (w.length>=4 ? 1 : 0);
   return nearest(w, pl, lim);
+}
+/* 文のどこにあっても寸法の形を見つける。人に区切らせない。
+   「玄関壁2.4が3本廊下壁2.4が2本」を2つに割る */
+var MEAS_G = /(\d+(?:\.\d+)?)\s*(?:が|かける|×|x|X|\*|の)\s*(\d+(?:\.\d+)?)\s*(本|枚|箇所|か所|カ所|ヶ所)?/g;
+var QTY_G  = /(\d+(?:\.\d+)?)\s*(枚|本|個|台|箇所|か所|カ所|ヶ所|セット|式|㎡|平米|帖|畳|m|ｍ|メートル)(?![\d０-９])/g;
+function sayScan(text){
+  var t=String(text||"");
+  var hits=[];
+  MEAS_G.lastIndex=0;
+  var m;
+  while((m=MEAS_G.exec(t))){ hits.push({s:m.index, e:m.index+m[0].length, kind:"hw", a:m[1], b:m[2]}); }
+  QTY_G.lastIndex=0;
+  while((m=QTY_G.exec(t))){
+    var s2=m.index, e2=m.index+m[0].length, dup=false;
+    /* 掛け算の一部を、別の数として二重に拾わない */
+    for(var i=0;i<hits.length;i++) if(!(e2<=hits[i].s || s2>=hits[i].e)) dup=true;
+    if(!dup) hits.push({s:s2, e:e2, kind:"q", a:m[1], u:m[2]});
+  }
+  hits.sort(function(x,y){ return x.s-y.s; });
+  return hits;
 }
 function sayRow(line){
   var t=sayNorm(line).trim(); if(!t) return null;
@@ -1441,6 +1468,30 @@ function sayRow(line){
   if(q) return {place:sayPlace(t,q.index), part:part, qty:q[1], unit:q[2],
                 raw:line.trim(), all:t};
   return null;
+}
+/* その項目の単位。式・台・箇所なら、名前を言うだけで1つ分になる */
+function unitOf(cat,name){
+  var list=(KOUSHU[cat]||{}).i||[];
+  for(var i=0;i<list.length;i++) if(list[i][0]===name) return list[i][1];
+  return "";
+}
+/* 数を言わなかった工事を、1つ分の行にする。
+   名前のあとに残った言葉（4LDK、白、防カビ）は規格・仕様に回す */
+function sayOne(cat,name,t){
+  if(!name) return null;
+  var u=unitOf(cat,name);
+  if(!/式|台|箇所|セット|個|回|人工|日/.test(u)) return null;
+  var rest=String(t||"").split(name).join(" ");
+  var st=itemStem(name);
+  if(st && st.length>=2) rest=rest.split(st).join(" ");
+  rest=rest.replace(/[\s　]+/g," ").trim();
+  var sp="";
+  if(rest){
+    var mm=rest.match(MADORI_RE);
+    if(mm) sp=mm[0].replace(/\s/g,"").toUpperCase();
+    else { var aa=attrOnly(rest); sp = aa || (rest.length<=14 ? rest : ""); }
+  }
+  return {place:"", qty:1, unit:u, addSpec:sp, one:true};
 }
 /* その工種の項目名を、そのまま言ったときだけ拾う。
    「壁」「天井」のような手がかりでは動かさない */
@@ -1478,11 +1529,36 @@ function sayParse(cat,text,fixed){
        「壁」「天井」だけでクロスに化けさせない */
     var nm = fixed ? sayItemExact(cat,t) : sayItem(cat,t);
     if(nm) cur=nm;
+    /* 続けて喋られた文には、寸法がいくつも入っている。全部拾う */
+    var hits=sayScan(t);
+    if(hits.length>1){
+      var prev=0;
+      hits.forEach(function(hh){
+        var seg=t.slice(prev, hh.e); prev=hh.e;
+        var rr=sayRow(seg);
+        if(!rr) return;
+        var nm2 = fixed ? sayItemExact(cat,seg) : sayItem(cat,seg);
+        if(nm2) cur=nm2;
+        rr.item=cur||fixed||sayItem(cat,seg)||"クロス張替え";
+        out.push(rr);
+      });
+      /* 最後の寸法より後ろに残った言葉（への字 シルバー など） */
+      var tailTxt=t.slice(prev).trim();
+      if(tailTxt){
+        var at2=attrOnly(tailTxt);
+        if(at2 && out.length) out[out.length-1].addSpec=at2;
+      }
+      if(out.length) return;
+    }
     var r=sayRow(L);
     /* 「への字 シルバー」——数字は無いが捨てない。直前の行の規格・仕様になる */
     if(!r){
       var at=attrOnly(t);
       if(at && out.length){ out[out.length-1].addSpec=at; return; }
+      /* 「ルームクリーニング 4LDK」——数を言わない工事がある。
+         式・台・箇所で数えるものは、名前を言った時点で1つ分 */
+      var one=sayOne(cat, nm||cur, t);
+      if(one){ one.item = nm||cur; cur = one.item; out.push(one); return; }
       bad.push(t.trim()); return;
     }
     r.item=cur||fixed||sayItem(cat,t)||"クロス張替え";
@@ -1654,6 +1730,7 @@ function walkLine(j,raw){
     t2=t2.replace(/\s{2,}/g," ").trim();
   }
   var pv=sayParse(cat, t2, V.walkItem);
+  /* 続けて喋ったぶんは、まとめて何行にもなる */
   if(!pv.rows.length){
     /* 「クロス」「壁紙」だけ言った——数はまだ。工事だけ切り替えて、そう見せる。
        黙っていると、聞こえていないのか切り替わったのか分からない */
@@ -1661,6 +1738,11 @@ function walkLine(j,raw){
       + (V.walkPlace ? "（" + V.walkPlace + "）" : ""));
     return note("bad","読み取れませんでした：" + t);
   }
+  /* 間取りを言わなかったルームクリーニングは、基本情報の間取りを入れておく */
+  pv.rows.forEach(function(r2){
+    if(r2.one && !r2.addSpec && /クリーニング/.test(r2.item||"") && madoriText(j))
+      r2.addSpec=madoriText(j);
+  });
   /* 場所を言っていない行は、いまいる部屋のもの */
   pv.rows.forEach(function(r){ if(!r.place && V.walkPlace) r.place=V.walkPlace; });
   sayApply(j,cat,pv);
@@ -1817,6 +1899,9 @@ function sayApply(j,cat,parsed){
     /* 掛け算で言った行は縦と横。数を1つだけ言った行はそのまま数量 */
     if(r.qty!=null){ row.qty=r.qty; delete row.h; delete row.n; }
     else { row.h=r.h; row.n=r.n; delete row.qty; }
+    /* 数を言わなかった工事は、間取りが分かっていればそれを入れる */
+    if(r.one && !r.addSpec && /クリーニング/.test(it.name) && madoriText(j))
+      r.addSpec=madoriText(j);
     if(r.addSpec) addSpec(row, r.addSpec);
     it.rows.push(row);
     LAST_ROW=row; LAST_ROW_NAME=it.name;
@@ -2466,7 +2551,7 @@ function sendToISS(mode){
 }
 
 /* ===== 画面 ===== */
-var BUILD="2026-09-07 17:51";
+var BUILD="2026-09-07 18:25";
 var ROLE="sales";
 try{ ROLE=localStorage.getItem("genchoRole")||"sales"; }catch(e){}
 /* 営業に配る版には単価が入っていない。ISS委託者モードには切り替えられない */
@@ -2489,6 +2574,10 @@ var V={view:"home",job:null,tab:"info",cat:null,focus:null,arow:null,allplace:nu
        walkPlace:null,walkCat:null,walkItem:null,walkType:false,walkText:""};
 /* 聞き取り中の装置。喋りっぱなしにできるよう、止めるまで持っておく */
 var SAY_REC=null, SAY_WANT=false;
+/* 声はまだ現場に出せる精度ではない。既定では表に出さない。
+   押して選ぶ・打つ・貼る、の3つだけを出す */
+var VOICE=false;
+try{ VOICE = localStorage.getItem("genchoVoice")==="1"; }catch(e){}
 /* 行の区切り。ここで1か所に決めておく */
 var SPLIT_LINES=/[\r\n]+/;
 var app=document.getElementById("app");
@@ -2704,10 +2793,16 @@ function home(){
     +'　工種は実際の見積明細から整理した17工種101項目です。入力内容はこの端末の中だけに保存されます（試作のため）。'
     /* 共有リンクは古い版に固定されることがある。どの版を見ているか分かるように出す */
     +'<br><span style="color:var(--ink-3);font-size:11.5px">このアプリの更新　'
-    +'<b class="num">2026-09-07 17:51</b>　'
+    +'<b class="num">2026-09-07 18:25</b>　'
     +'（画面が古いと思ったら、ここの日時を教えてください）</span></p>'
     +'<button class="btn ghost wide sm" data-fb style="margin-top:8px">'
     +'気づいたことを書く（触ってみた感想）</button>'
+    +'<div class="note" style="margin-top:10px">'
+    +'<b>声で書く機能は、まだ現場に出せる精度ではありません。</b>'
+    +'続けて喋ると取り違えるため、いまは表に出していません。'
+    +'試すときだけ下で出してください。</div>'
+    +'<button class="btn ghost sm" data-voice style="margin-top:6px">'
+    +(VOICE?'声で書くを しまう（開発中）':'声で書くを 出す（開発中）')+'</button>'
     +'<button class="btn danger sm" data-reset style="margin-top:8px">サンプルの状態に戻す</button>';
   app.innerHTML=h;
 }
@@ -2720,7 +2815,9 @@ function jobView(){
   var pt=photoTotals(j), oc=openChecks(j);
   var h='<div class="stickynav"><div class="backbar"><button class="backbtn" data-back="home">‹ 現調一覧</button>'
     +'<span class="where">'+esc(j.name)+'</span></div>';
-  h+='<div class="tabs" role="tablist">'+tb("info","基本")+tb("walk","歩く")+tb("items","工種")+tb("equip","設備")
+  if(!VOICE && V.tab==="walk") V.tab="items";
+  h+='<div class="tabs" role="tablist">'+tb("info","基本")
+    +(VOICE?tb("walk","歩く"):"")+tb("items","工種")+tb("equip","設備")
     +tb("issue","要確認"+(oc?' <span class="tabbadge">'+oc+'</span>':''))
     +tb("photo","写真"+(pt.left?' <span class="tabbadge">'+pt.left+'</span>':''))+'</div></div>';
   h+=({info:infoTab,walk:walkTab,items:catListTab,equip:equipTab,issue:issueTab,photo:photoTab})[V.tab](j);
@@ -2957,10 +3054,12 @@ function catListTab(j){
     +'打った時点でこの端末に入ります。保存ボタンはありません。</span></div>';
   /* 声で工事名を言えば、その問診票が開く。
      現調は両手が塞がっていて、目は現物を見ている。画面を見るために目を離させない */
-  h+='<button class="btn voice" data-tab="walk"><span class="mic">●</span>'
-    +'歩きながら書く<small>押したら、あとは喋るだけ。工種も項目も選びません</small></button>';
-  h+='<button class="btn ghost wide sm" data-say style="margin:-2px 0 10px">'
-    +'工事名を1つだけ言って開く</button>';
+  if(VOICE){
+    h+='<button class="btn voice" data-tab="walk"><span class="mic">●</span>'
+      +'歩きながら書く<small>押したら、あとは喋るだけ。工種も項目も選びません</small></button>';
+    h+='<button class="btn ghost wide sm" data-say style="margin:-2px 0 10px">'
+      +'工事名を1つだけ言って開く</button>';
+  }
   /* 声が使えない場所では、ここに同じことを打つ。声と打つのは同じ入口 */
   if(V.saybox){
     h+='<div class="card" style="margin-top:-4px"><div class="field">'
@@ -3192,7 +3291,9 @@ function impBox(name){
     +(on?'<span class="live"><span class="mic">●</span>聞いています</span>':'')
     +(V.impGot?'<span class="ok">この画面で '+V.impGot+'行 書き取りました</span>':'')
     +(on?'<button class="btn ghost sm" data-impstop>止める</button>'
-        :'<button class="btn ghost sm" data-sayit="'+(V.impItem==null?"":V.impItem)+'">● 声で足す</button>')
+        : (V.impItem==null
+            ? '<button class="btn ghost sm" data-sayall>● 声で足す</button>'
+            : '<button class="btn ghost sm" data-sayit="'+V.impItem+'">● 声で足す</button>'))
     +'<button class="btn ghost sm" data-impflush>残りも入れる</button>'
     +'<button class="btn ghost sm" data-impclose>閉じる</button>'
     +'</div></div>';
@@ -3341,14 +3442,16 @@ function koushuView(){
     +'</div></div>';
   /* 声は、項目チップに紛れさせない。押す物として立てる */
   var catOn = (SAY_REC && V.impItem==null);
+  if(VOICE)
   h+='<button class="voicebar'+(catOn?" on":"")+'" '+(catOn?'data-impstop':'data-sayall')+'>'
     +'<span class="mic">'+(catOn?'■':'●')+'</span>'
     +'<span class="tx"><b>'+(catOn?'聞いています　押すと止まります':esc(cat)+'を声で書く')+'</b>'
     +'<small>'+(catOn
        ? '工事名・場所・数を続けて言ってください。押し直しは要りません'
        : '「クロス 玄関 壁 2.4が2本」のように言うだけ。押し直しは要りません')+'</small></span></button>';
-  h+='<button class="btn ghost wide sm" data-imp style="margin:-6px 0 12px;padding:6px">'
-    +'声が使えないときは、ここに打つ／メモから貼る</button>';
+  h+='<button class="btn ghost wide sm" data-imp style="margin:'
+    +(VOICE?'-6px':'2px')+' 0 12px;padding:8px">'
+    +'メモから貼る／まとめて打つ</button>';
   if(V.imp===cat && V.impItem==null) h+=impBox(null);
 
   if(!list.length) h+='<div class="empty">上のボタンを押すと、行が増えます。</div>';
@@ -3362,10 +3465,12 @@ function koushuView(){
     h+='<div class="line" id="it'+idx+'"><div class="top">'
       +'<div class="nm">'+esc(it.name)+'</div>'
       /* この工事に向けて喋る。工事名を言わなくていいぶん、言い間違えようがない */
-      +'<button class="micbtn'+(micOn?" on":"")+'" data-sayit="'+idx+'" '
-      +'aria-label="'+esc(it.name)+'を声で足す" title="声で足す">'
-      +'<span class="d">'+(micOn?'■':'●')+'</span>'
-      +(micOn?'止める':'声')+'</button>'
+      +(VOICE
+        ? '<button class="micbtn'+(micOn?" on":"")+'" data-sayit="'+idx+'" '
+          +'aria-label="'+esc(it.name)+'を声で足す" title="声で足す">'
+          +'<span class="d">'+(micOn?'■':'●')+'</span>'
+          +(micOn?'止める':'声')+'</button>'
+        : '')
       +(meas?'<button class="helpbtn" data-guide="'+idx+'" title="測り方">'
              +(V.guide===idx?'×':'測り方')+'</button>':'')
       +(m2?'<button class="helpbtn" data-help="'+esc(it.name)+'">?</button>':'')
@@ -3930,7 +4035,7 @@ document.addEventListener("keydown",function(e){
 /* ---------- 操作 ---------- */
 document.addEventListener("click",function(e){
   var t=e.target.closest("[data-open],[data-new],[data-reset],[data-back],[data-tab],[data-cat],[data-go],"
-    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-ack],[data-kiri],[data-guide],[data-picopenbox],[data-more],[data-pick],[data-fb],[data-fbclose],[data-fbcopy],[data-acflag],[data-setf],[data-spec],"
+    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-ack],[data-kiri],[data-guide],[data-picopenbox],[data-more],[data-pick],[data-fb],[data-fbclose],[data-fbcopy],[data-voice],[data-acflag],[data-setf],[data-spec],"
     +"[data-addroom],[data-delroom],[data-openrooms],[data-adde],[data-dele],[data-adds],[data-dels],[data-help],[data-send],"
     +"[data-keyset],[data-keydel],[data-keyadd],[data-place],[data-allplace],[data-pdrop],[data-moreplace],[data-rsc],[data-rpart],[data-hi],[data-hd],[data-nq],[data-nadd],[data-dir],[data-loss],[data-grip],[data-tile],[data-eqo],[data-pk],[data-pko],[data-pks],[data-pkg],[data-pkdz],[data-pkp],[data-addpack],[data-say],[data-imp],[data-impflush],[data-impclose],[data-addrow],[data-delrow],[data-sayit],[data-impstop],[data-saybox],[data-sayword],[data-picopen],[data-picclose],[data-picdel],[data-walkgo],[data-go],[data-walktypeon],[data-walktypeoff],[data-walkflush],[data-sayall]");
   if(!t) return;
@@ -3977,16 +4082,21 @@ document.addEventListener("click",function(e){
     V.impItem=null; return render();
   }
   /* 項目の右肩のマイク。その項目に向けて喋る */
-  if(t.dataset.sayit!=null&&j){
+  if(t.dataset.sayit!=null&&t.dataset.sayit!==""&&j){
     var si=+t.dataset.sayit;
     if(V.impItem===si && SAY_REC){ stopDictate(); return render(); }
-    V.imp=V.cat; V.impItem=si; V.impText=""; V.impGot=0;
+    /* 別の項目に移るときだけ中身を入れ替える。
+       同じ項目でもう一度押しただけで、書いたものを消さない */
+    if(V.impItem!==si){ V.impText=""; V.impGot=0; }
+    V.imp=V.cat; V.impItem=si;
     render(); startDictate(); return;
   }
   if(t.hasAttribute("data-impstop")){ stopDictate(); return render(); }
   /* 工種ぜんぶに向けて喋る。工事名から言う */
   if(t.hasAttribute("data-sayall")&&j){
-    V.imp=V.cat; V.impItem=null; V.impText=""; V.impGot=0;
+    /* 工種ぜんぶに向けて喋る。すでに書いてあるものは消さない */
+    if(V.impItem!=null){ V.impText=""; V.impGot=0; }
+    V.imp=V.cat; V.impItem=null;
     render(); startDictate(); return;
   }
   if(t.hasAttribute("data-walktypeon")){ V.walkType=true; render();
@@ -4166,6 +4276,13 @@ document.addEventListener("click",function(e){
     delete j.sample; save(); return render();
   }
   /* 部屋ごとの種別。押すたびに入り、もう一度押すと外れる */
+  if(t.hasAttribute("data-voice")){
+    VOICE=!VOICE;
+    try{ localStorage.setItem("genchoVoice", VOICE?"1":"0"); }catch(e){}
+    if(!VOICE) stopDictate();
+    toast(VOICE?"声で書くを出しました（開発中）":"声で書くをしまいました");
+    return render();
+  }
   if(t.hasAttribute("data-fb")){ fbOpen(); return; }
   if(t.hasAttribute("data-fbclose")){ fbClose(); return; }
   if(t.hasAttribute("data-fbcopy")){
