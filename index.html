@@ -317,6 +317,23 @@ input.rspec{flex-basis:100%;margin-left:37px;width:auto}
 .chiri .q{font-size:13px;font-weight:700;color:var(--ink)}
 .chiri .q2{font-size:12px;color:var(--ink-2)}
 .chiri .ok{font-size:12px;font-weight:700;color:var(--ok)}
+/* 使い方の中身。読み物なので、行間を広めに */
+.hlp{font-size:13.5px;line-height:1.9;color:var(--ink-2)}
+.hlp p{margin:0 0 10px}
+.hlp b{color:var(--ink)}
+.hlp h4{font-family:"Zen Kaku Gothic New",sans-serif;font-size:14px;font-weight:700;
+  color:var(--ink);margin:16px 0 7px;padding-bottom:5px;border-bottom:1px solid var(--line-soft)}
+.hlp ul,.hlp ol{margin:0 0 10px;padding-left:20px}
+.hlp li{margin-bottom:5px}
+.hlp .hn{background:var(--surface-2);border-radius:8px;padding:9px 11px;font-size:12.5px}
+.hlp .hng li{color:var(--ink-2)}
+.hlpt{width:100%;border-collapse:collapse;margin-bottom:10px}
+.hlpt td{padding:7px 6px;border-bottom:1px solid var(--line-soft);vertical-align:top;font-size:13px}
+.hlpt td:first-child{width:4.2em;white-space:nowrap;color:var(--accent)}
+.hlpt tr:last-child td{border-bottom:0}
+.hlpc{background:var(--sunken);border-radius:8px;padding:11px 13px;margin:0 0 10px;
+  font-family:"Roboto Mono",monospace;font-size:12.5px;line-height:1.9;color:var(--ink);
+  white-space:pre;overflow-x:auto}
 /* 設備の1行。押すと中身が出る */
 .eqh{display:flex;align-items:center;gap:10px;width:100%;padding:12px 2px;border:0;
   background:none;cursor:pointer;text-align:left;min-height:48px}
@@ -2574,7 +2591,7 @@ function sendToISS(mode){
 }
 
 /* ===== 画面 ===== */
-var BUILD="2026-09-10 10:46";
+var BUILD="2026-09-10 13:26";
 var ROLE="sales";
 try{ ROLE=localStorage.getItem("genchoRole")||"sales"; }catch(e){}
 /* 営業に配る版には単価が入っていない。ISS委託者モードには切り替えられない */
@@ -2593,7 +2610,7 @@ function roleNote(){
     : '<div class="rolebar"><b>営業モード</b>　金額は表示しません。拾い出しと現場情報だけを記録します。</div>';
 }
 
-var V={view:"home",job:null,tab:"info",cat:null,focus:null,arow:null,allplace:null,moreplace:null,rooms:false,imp:null,impText:"",impGot:0,saybox:false,sayText:"",impItem:null,impBox:{},guide:null,pic:null,more:null,sec:{},proom:null,eq:null,iss:null,
+var V={view:"home",job:null,tab:"info",cat:null,focus:null,arow:null,allplace:null,moreplace:null,rooms:false,imp:null,impText:"",impGot:0,saybox:false,sayText:"",impItem:null,impBox:{},guide:null,pic:null,more:null,sec:{},proom:null,eq:null,iss:null,help:null,
        walkPlace:null,walkCat:null,walkItem:null,walkType:false,walkText:""};
 /* 聞き取り中の装置。喋りっぱなしにできるよう、止めるまで持っておく */
 var SAY_REC=null, SAY_WANT=false;
@@ -2788,9 +2805,79 @@ function back(label,target){
 }
 
 /* ---------- ホーム ---------- */
+/* 使い方。初めて開いた人には出しておく。一度閉じたら、もう出さない */
+function helpSeen(){
+  try{ return localStorage.getItem("genchoHelp")==="1"; }catch(e){ return false; }
+}
+function helpCard(){
+  var open = (V.help!=null) ? V.help : !helpSeen();
+  var h='<div class="card sec'+(open?" open":"")+'" style="border-color:var(--accent)">'
+    +'<button class="sech" data-helpc>'
+    +'<span class="t" style="color:var(--accent)">はじめての方へ　この道具は何か</span>'
+    +'<span class="c">'+(open?'−':'＋')+'</span></button>';
+  if(!open) return h+'</div>';
+  h+='<div class="card-b hlp">'
+
+  +'<p><b>現地調査で見たことを、その場で全部書き留めるノートです。</b>'
+  +'書いたものはそのままISS見積代行へ渡り、見積になります。'
+  +'紙とスマホのメモに散っていたものを、1つにまとめるのが目的です。</p>'
+
+  +'<h4>まず、この2つだけ</h4>'
+  +'<ul>'
+  +'<li><b>保存ボタンはありません。</b>打った瞬間にこの端末に入ります。</li>'
+  +'<li><b>途中で閉じて大丈夫です。</b>次に開くと続きから書けます。</li>'
+  +'</ul>'
+
+  +'<h4>画面は5つ</h4>'
+  +'<table class="hlpt">'
+  +'<tr><td><b>基本</b></td><td>着いてすぐ書くもの。物件名・間取り・ブレーカー・エアコン・鍵。'
+  +'下の3つ（物件のこと／ISSに渡すこと／自分用メモ）は押すと開きます。</td></tr>'
+  +'<tr><td><b>工種</b></td><td><b>ここが本体です。</b>工事を選んで、場所と数を入れます。</td></tr>'
+  +'<tr><td><b>設備</b></td><td>いま付いている物のメーカー・品番・年式。次の交換提案の材料です。</td></tr>'
+  +'<tr><td><b>要確認</b></td><td>工事にはならないが気になったこと。症状を選ぶと、確かめる項目が出ます。</td></tr>'
+  +'<tr><td><b>写真</b></td><td>部屋ごとに「ここは撮る」が出ます。📷でその場で撮れます。</td></tr>'
+  +'</table>'
+
+  +'<h4>工種の画面での書き方</h4>'
+  +'<ol>'
+  +'<li>上の<b>「＋クロス張替え」</b>のような札を押す　→　その工事が下に出ます</li>'
+  +'<li><b>青く光っている行</b>が、いま書いている行です</li>'
+  +'<li>下に<b>場所の札</b>と<b>数字のパッド</b>が出るので、押して入れます</li>'
+  +'<li>次の場所は<b>「＋ 行を足す」</b>。場所を空けたままにすると、上の行と同じ場所の続きになります</li>'
+  +'</ol>'
+  +'<p class="hn">クロスは<b>壁＝巾0.9ｍで何本</b>、<b>天井＝縦×横</b>で数えます。'
+  +'行の「壁／天井」を押すと切り替わります。迷ったら項目の右上の<b>「測り方」</b>を押してください。</p>'
+
+  +'<h4>まとめて打つ／貼る</h4>'
+  +'<p>工種の画面の<b>「メモから貼る／まとめて打つ」</b>に、こう書いて改行すると行になります。'
+  +'iPhoneのメモに書いたものを貼っても同じです。</p>'
+  +'<pre class="hlpc">玄関 壁 2.4が3本'
+  +'\u000a廊下 壁 2.4が2本'
+  +'\u000a洋室1 天井 2.6かける3.5'
+  +'\u000aキッチン CF 3.6かける2.4</pre>'
+
+  +'<h4>いま出来ていないこと</h4>'
+  +'<ul class="hng">'
+  +'<li><b>ISSへは、まだ実際には飛びません。</b>画面までの試作です</li>'
+  +'<li><b>書いたものと写真は、この端末の中だけ</b>に残ります。ほかの人には見えません</li>'
+  +'<li>設備の細かい仕様（ユニットバスの勝手、キッチンの左右シンク、給湯器の号数、トイレの排水）は<b>まだ入っていません</b></li>'
+  +'<li>声で書く機能は<b>まだ精度が足りない</b>ので、表に出していません</li>'
+  +'</ul>'
+
+  +'<h4>気づいたことを送る</h4>'
+  +'<p>この画面のいちばん下の<b>「気づいたことを書く」</b>に書いて「コピーする」を押すと、'
+  +'版と画面が入った文ができます。チャットワークに貼るだけです。<br>'
+  +'<b>「使いにくい」より「ここでこう入れたら、こうなった」</b>のほうが直せます。'
+  +'良かった所も書いてください。消さずに残せます。</p>'
+
+  +'<div style="margin-top:12px"><button class="btn ghost sm" data-helpdone>読みました（閉じる）</button></div>'
+  +'</div></div>';
+  return h;
+}
 function home(){
-  var h=roleNote()+'<div class="backbar"><span class="where">現調一覧</span></div>'
-    +'<div class="card"><div class="rowlist">';
+  var h=roleNote()+'<div class="backbar"><span class="where">現調一覧</span></div>';
+  if(!isISS()) h+=helpCard();
+  h+='<div class="card"><div class="rowlist">';
   /* ISSに見えるのは、営業が送信ずみの現調だけ。手元で書きかけのものは存在しない */
   var list = isISS() ? DB.jobs.filter(function(x){ return !!x.sent; }) : DB.jobs;
   if(!list.length) h+='<div class="empty">'
@@ -2816,7 +2903,7 @@ function home(){
     +'　工種は実際の見積明細から整理した17工種101項目です。入力内容はこの端末の中だけに保存されます（試作のため）。'
     /* 共有リンクは古い版に固定されることがある。どの版を見ているか分かるように出す */
     +'<br><span style="color:var(--ink-3);font-size:11.5px">このアプリの更新　'
-    +'<b class="num">2026-09-10 10:46</b>　'
+    +'<b class="num">2026-09-10 13:26</b>　'
     +'（画面が古いと思ったら、ここの日時を教えてください）</span></p>'
     +'<button class="btn ghost wide sm" data-fb style="margin-top:8px">'
     +'気づいたことを書く（触ってみた感想）</button>'
@@ -4090,7 +4177,7 @@ document.addEventListener("keydown",function(e){
 /* ---------- 操作 ---------- */
 document.addEventListener("click",function(e){
   var t=e.target.closest("[data-open],[data-new],[data-reset],[data-back],[data-tab],[data-cat],[data-go],"
-    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-ack],[data-kiri],[data-guide],[data-picopenbox],[data-more],[data-pick],[data-sec],[data-proom],[data-eqopen],[data-issopen],[data-fb],[data-fbclose],[data-fbcopy],[data-voice],[data-acflag],[data-setf],[data-spec],"
+    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-ack],[data-kiri],[data-guide],[data-picopenbox],[data-more],[data-pick],[data-sec],[data-proom],[data-eqopen],[data-issopen],[data-helpc],[data-helpdone],[data-fb],[data-fbclose],[data-fbcopy],[data-voice],[data-acflag],[data-setf],[data-spec],"
     +"[data-addroom],[data-delroom],[data-openrooms],[data-adde],[data-dele],[data-adds],[data-dels],[data-help],[data-send],"
     +"[data-keyset],[data-keydel],[data-keyadd],[data-place],[data-allplace],[data-pdrop],[data-moreplace],[data-rsc],[data-rpart],[data-hi],[data-hd],[data-nq],[data-nadd],[data-dir],[data-loss],[data-grip],[data-tile],[data-eqo],[data-pk],[data-pko],[data-pks],[data-pkg],[data-pkdz],[data-pkp],[data-addpack],[data-say],[data-imp],[data-impflush],[data-impclose],[data-addrow],[data-delrow],[data-sayit],[data-impstop],[data-saybox],[data-sayword],[data-picopen],[data-picclose],[data-picdel],[data-walkgo],[data-go],[data-walktypeon],[data-walktypeoff],[data-walkflush],[data-sayall]");
   if(!t) return;
@@ -4364,6 +4451,14 @@ document.addEventListener("click",function(e){
   if(t.dataset.proom){
     V.proom = (V.proom===t.dataset.proom) ? null : t.dataset.proom;
     return render();
+  }
+  if(t.hasAttribute("data-helpc")){
+    V.help = (V.help!=null) ? !V.help : helpSeen();
+    return render();
+  }
+  if(t.hasAttribute("data-helpdone")){
+    try{ localStorage.setItem("genchoHelp","1"); }catch(e){}
+    V.help=false; return render();
   }
   if(t.dataset.sec){
     V.sec=V.sec||{};
