@@ -317,6 +317,24 @@ input.rspec{flex-basis:100%;margin-left:37px;width:auto}
 .chiri .q{font-size:13px;font-weight:700;color:var(--ink)}
 .chiri .q2{font-size:12px;color:var(--ink-2)}
 .chiri .ok{font-size:12px;font-weight:700;color:var(--ok)}
+/* 設備の1行。押すと中身が出る */
+.eqh{display:flex;align-items:center;gap:10px;width:100%;padding:12px 2px;border:0;
+  background:none;cursor:pointer;text-align:left;min-height:48px}
+.eqh .k{font-weight:700;font-size:14.5px;color:var(--ink);flex:none}
+.eqh .s{font-size:12.5px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;flex:1;min-width:0}
+.eqh .c{font-size:16px;color:var(--ink-3);width:18px;text-align:center;flex:none}
+.line.fold{padding:0 12px}
+/* 畳めるひとかたまり。押すと開く */
+.sec{overflow:hidden}
+.sech{display:flex;align-items:center;gap:10px;width:100%;padding:15px 16px;border:0;
+  background:var(--surface);cursor:pointer;text-align:left;min-height:54px}
+.sech .t{font-family:"Zen Kaku Gothic New",sans-serif;font-size:15.5px;font-weight:700;color:var(--ink)}
+.sech .n{font-size:12px;color:var(--ink-3);margin-left:auto}
+.sech .c{font-size:17px;color:var(--ink-3);width:20px;text-align:center;flex:none}
+.sec.open .sech{border-bottom:1px solid var(--line-soft)}
+.sec.open .sech .c{color:var(--accent)}
+.sec .card-b{padding-top:14px}
 .acgrid{display:flex;flex-direction:column;gap:1px}
 .acrow{display:flex;align-items:center;gap:8px;padding:7px 2px;
   border-bottom:1px solid var(--line-soft)}
@@ -1103,6 +1121,11 @@ function load(){
           var src=(j.equip||[])[i]; if(src){ e.メーカー=src.maker; e.品番=src.model; }
         });
       }
+    }
+    /* 「注意事項」と「ISS伝達メモ」を1つにまとめた。前に書いたものを捨てない */
+    if(j.issMemo){
+      j.caution = (j.caution ? j.caution+String.fromCharCode(10) : "") + j.issMemo;
+      delete j.issMemo;
     }
     /* 壁／天井は項目単位だったものを行単位に移す */
     (j.items||[]).forEach(function(it){
@@ -2395,12 +2418,12 @@ function buildPayload(j){
     ブレーカー:j.breaker||"",通電:j.power||"",
     通電依頼:(j.power==="通電なし")?"要":"",
     アンペア:j.amp||"",
-    職人指定:j.shokunin||"",注意事項:j.caution||"",
+    職人指定:j.shokunin||"",注意事項:j.caution||"",ISS伝達メモ:j.caution||"",
     物件名:j.name||"",住所:j.addr||"",間取り:madoriText(j),工事申請:j.apply||"",
     駐車場:(j.parking||"")+(j.parkingMemo?"（"+j.parkingMemo+"）":""),鍵場所:j.key||"",エアコン台数:acTotal(j)||"",
     エアコン内訳:acList(j).map(function(x){
       return x.place+" "+x.n+"台"+(x.spec?"（"+x.spec+"）":"");}).join("・"),
-    エアコン備考:((j.acFlags||[]).join("・")+" "+(j.acMemo||"")).trim(),ISS伝達メモ:j.issMemo||"",
+    エアコン備考:((j.acFlags||[]).join("・")+" "+(j.acMemo||"")).trim(),
     自由記入:j.freeMemo||"",現調日:j.date||"",送信元:"gencho-note",
     拾い出し:rows,
     設備:(j.equip||[]).map(function(e){return {場所:e.place||"",種別:e.kind,メーカー:e.maker||"",
@@ -2551,7 +2574,7 @@ function sendToISS(mode){
 }
 
 /* ===== 画面 ===== */
-var BUILD="2026-09-07 18:25";
+var BUILD="2026-09-10 10:46";
 var ROLE="sales";
 try{ ROLE=localStorage.getItem("genchoRole")||"sales"; }catch(e){}
 /* 営業に配る版には単価が入っていない。ISS委託者モードには切り替えられない */
@@ -2570,7 +2593,7 @@ function roleNote(){
     : '<div class="rolebar"><b>営業モード</b>　金額は表示しません。拾い出しと現場情報だけを記録します。</div>';
 }
 
-var V={view:"home",job:null,tab:"info",cat:null,focus:null,arow:null,allplace:null,moreplace:null,rooms:false,imp:null,impText:"",impGot:0,saybox:false,sayText:"",impItem:null,impBox:{},guide:null,pic:null,more:null,
+var V={view:"home",job:null,tab:"info",cat:null,focus:null,arow:null,allplace:null,moreplace:null,rooms:false,imp:null,impText:"",impGot:0,saybox:false,sayText:"",impItem:null,impBox:{},guide:null,pic:null,more:null,sec:{},proom:null,eq:null,iss:null,
        walkPlace:null,walkCat:null,walkItem:null,walkType:false,walkText:""};
 /* 聞き取り中の装置。喋りっぱなしにできるよう、止めるまで持っておく */
 var SAY_REC=null, SAY_WANT=false;
@@ -2793,7 +2816,7 @@ function home(){
     +'　工種は実際の見積明細から整理した17工種101項目です。入力内容はこの端末の中だけに保存されます（試作のため）。'
     /* 共有リンクは古い版に固定されることがある。どの版を見ているか分かるように出す */
     +'<br><span style="color:var(--ink-3);font-size:11.5px">このアプリの更新　'
-    +'<b class="num">2026-09-07 18:25</b>　'
+    +'<b class="num">2026-09-10 10:46</b>　'
     +'（画面が古いと思ったら、ここの日時を教えてください）</span></p>'
     +'<button class="btn ghost wide sm" data-fb style="margin-top:8px">'
     +'気づいたことを書く（触ってみた感想）</button>'
@@ -2881,24 +2904,32 @@ function acPlaces(j){
 function fld(label,key,val,type){
   return '<div class="field"><label>'+label+'</label><input type="'+(type||"text")+'" value="'+esc(val||"")+'" data-jf="'+key+'"></div>';
 }
+/* 畳めるひとかたまり。開いたかどうかは端末が覚える */
+function sec(key,title,note,inner,openDefault){
+  var on = (V.sec && V.sec[key]!=null) ? V.sec[key] : !!openDefault;
+  return '<div class="card sec'+(on?" open":"")+'">'
+    +'<button class="sech" data-sec="'+key+'">'
+    +'<span class="t">'+esc(title)+'</span>'
+    +(note?'<span class="n">'+esc(note)+'</span>':'')
+    +'<span class="c">'+(on?'−':'＋')+'</span></button>'
+    +(on?'<div class="card-b">'+inner+'</div>':'')
+    +'</div>';
+}
+
 function infoTab(j){
-  var h='<div class="card"><div class="card-h"><h2>現調シート</h2>'
-    +'<span class="eyebrow num" style="margin-left:auto">'+esc(j.gid||"")+'</span></div><div class="card-b">'
-    +'<div class="grid2">'+fld("顧客","customer",j.customer)+fld("店舗","store",j.store)+'</div>'
-    +'<div class="grid2">'+fld("担当","staff",j.staff)+fld("現調日","date",j.date,"date")+'</div>'
-    +fld("物件名","name",j.name)+fld("住所","addr",j.addr)
+  /* ── 着いてすぐ。ここだけは常に開いている ── */
+  var here=''
+    +fld("物件名","name",j.name)
     +'<div class="field"><label>間取り</label><div class="chips">'
     + MADORI.map(function(k){ return '<button data-jset="madori|'+k+'" aria-pressed="'+(j.madori===k)+'">'+k+'</button>'; }).join("")
     +'</div><div class="chips" style="margin-top:4px">'
     + MADORI_FLAGS.map(function(k){ var on=(j.mflags||[]).indexOf(k)>=0;
         return '<button data-jflag="'+esc(k)+'" aria-pressed="'+on+'">'+esc(k)+'</button>'; }).join("")
-    +'<span class="note" style="align-self:center;margin-left:4px">重ねて選べます</span></div>'
+    +'</div>'
     + ((j.madori==="5LDK以上"||j.madoriMemo)
         ? '<textarea data-jf="madoriMemo" placeholder="間取りメモ（例：5LDK＋書斎＋ロフト、2世帯）" style="margin-top:7px;min-height:52px">'+esc(j.madoriMemo||"")+'</textarea>' : '')
-    +(madoriText(j)?'<div class="note" style="margin-top:5px">送信される表記　<b>'+esc(madoriText(j))+'</b></div>':'')
     +'</div>'
-    /* 部屋に入ったら、まずブレーカーを上げて通電を見る。ここが現調の一手目。
-       通電していなくても現調は続く。止めずに、発注時の申し送りを立てるだけ */
+    /* 部屋に入ったら、まずブレーカーを上げて通電を見る。ここが現調の一手目 */
     +'<div class="field"><label>ブレーカー・通電</label>'
     +'<div class="chips">'
     + ["上げた","上がっていた","上げられない"].map(function(k){
@@ -2908,16 +2939,16 @@ function infoTab(j){
     + ["通電あり","通電なし"].map(function(k){
         return '<button data-jset="power|'+k+'" aria-pressed="'+(j.power===k)+'">'+k+'</button>'; }).join("")
     +'</div>'
-    +'<input type="text" value="'+esc(j.amp||"")+'" data-jf="amp" style="margin-top:5px" '
-    +'placeholder="アンペア数など（例：30A、単相200Vあり）">'
+    +(j.power||j.amp
+      ? '<input type="text" value="'+esc(j.amp||"")+'" data-jf="amp" style="margin-top:5px" '
+        +'placeholder="アンペア数など（例：30A、単相200Vあり）">' : '')
     +(j.power==="通電なし"
        ? '<div class="warnbar" style="margin-top:6px">通電していません。'
          +'<b>発注のときに、管理会社かオーナーへ通電の依頼が要ります。</b>'
          +'ISSへの依頼に「通電依頼」として載せます。現調はこのまま続けてください。</div>'
        : '')
     +'</div>'
-    /* 現調はエアコンの台数から入る。内部洗浄の台数になるので、間取りの次に置く。
-       台数だけでは足りない。どの部屋に何台あるかで、洗浄も交換も行が変わる */
+    /* どの部屋に何台・どんな種別か。種別で洗浄の値段が倍以上ちがう */
     +'<div class="field"><label>エアコン</label>'
     +'<div class="acgrid">'
     + acPlaces(j).map(function(rm){
@@ -2926,7 +2957,6 @@ function infoTab(j){
           +'<button class="acb" data-acn="'+esc(rm)+'|-1"'+(n?'':' disabled')+'>−</button>'
           +'<span class="n num">'+n+'</span>'
           +'<button class="acb" data-acn="'+esc(rm)+'|1">＋</button></div>';
-        /* 台数が入った部屋だけ、種別を聞く。ここが洗浄の値段を決める */
         if(n){
           h2+='<div class="ackind"><div class="chips sm">'
             + AC_KIND.map(function(k){
@@ -2941,45 +2971,19 @@ function infoTab(j){
         return h2;
       }).join("")
     +'</div>'
-    +'<div class="chips sm" style="margin-top:6px">'
-    + ["LDK","DK","居室","納戸","事務所"].filter(function(k){ return acPlaces(j).indexOf(k)<0; })
-        .map(function(k){ return '<button data-acadd="'+esc(k)+'">＋'+esc(k)+'</button>'; }).join("")
+    +(acTotal(j)
+      ? '<div class="note" style="margin-top:5px">合計 <b class="num">'+acTotal(j)+'台</b>　'
+        + acList(j).map(function(x){
+            return esc(x.place)+' '+x.n+'台'+(x.spec?'（'+esc(x.spec)+'）':'');
+          }).join(' ／ ')
+        +'</div>'
+        +'<input type="text" value="'+esc(j.acMemo||"")+'" data-jf="acMemo" style="margin-top:5px" '
+        +'placeholder="エアコンについて自由に（品番、年式、室外機の位置など）">'
+      : '<div class="note" style="margin-top:5px">付いている部屋の＋を押してください。</div>')
     +'</div>'
-    +'<div class="note" style="margin-top:5px">合計 <b class="num">'+acTotal(j)+'台</b>'
-    +(acTotal(j)?'　'+acList(j).map(function(x){
-        return esc(x.place)+' '+x.n+'台'+(x.spec?'（'+esc(x.spec)+'）':'');
-      }).join(' ／ '):'')
-    +'</div>'
-    /* 台数を選ぶ前から出す。現場では先に本体を見て、あとから数えることもある */
-    +'<div class="chips" style="margin-top:5px">'
-    + ["自動洗浄あり","自動洗浄なし","天井埋込あり","マルチ","全館空調","室外機の位置に注意"].map(function(k){
-        var on=(j.acFlags||[]).indexOf(k)>=0;
-        return '<button data-acflag="'+esc(k)+'" aria-pressed="'+on+'">'+esc(k)+'</button>'; }).join("")
-    +'</div>'
-    +'<input type="text" value="'+esc(j.acMemo||"")+'" data-jf="acMemo" style="margin-top:5px" '
-    +'placeholder="エアコンについて自由に（品番、年式、室外機の位置など）">'
-    + ((acTotal(j)>0)
-        ? '<div class="note" style="margin-top:5px">美装工事で内部洗浄を足すと、'
-          +'<b>'+acTotal(j)+'台</b>が、部屋ごとに分かれた行になって出ます。</div>'
-        : '')
-    +'</div>'
-    +'<div class="grid2">'
-    +'<div class="field"><label>工事申請</label><div class="chips">'
-    + ["あり","なし"].map(function(k){ return '<button data-jset="apply|'+k+'" aria-pressed="'+(j.apply===k)+'">'+k+'</button>'; }).join("")+'</div></div>'
-    +'<div class="field"><label>駐車場</label><div class="chips">'
-    + ["あり","なし"].map(function(k){ return '<button data-jset="parking|'+k+'" aria-pressed="'+(j.parking===k)+'">'+k+'</button>'; }).join("")+'</div></div></div>'
-    + (j.parking==="あり"||j.parkingMemo
-        ? '<div class="field"><label>駐車場メモ</label><textarea data-jf="parkingMemo" '
-          +'placeholder="場所・料金・利用時間など（例：建物裏 3番、1日1,500円、管理人へ申告）" '
-          +'style="min-height:52px">'+esc(j.parkingMemo||"")+'</textarea></div>'
-        : '')
-    /* 鍵場所は同じキーボックスを使い回すことが多いので、端末に覚えさせる。
-       現調で開けた場所と、帰りに仕込む場所は同じもの。欄を2つ持たない */
+    /* 現調で開けた場所であり、帰りに仕込む場所でもある */
     +'<div class="field"><label>鍵の場所</label>'
     +'<input type="text" value="'+esc(j.key||"")+'" data-jf="key" placeholder="例：メーターボックス内、玄関ドアノブ、管理人室">'
-    +'<div class="note" style="margin-top:4px">'
-    +'現調で開けた場所であり、<b>帰りにキーボックスを仕込む場所</b>でもあります。'
-    +'職人はここから入ります。</div>'
     +'<div class="chips sm" style="margin-top:6px">'
     + (DB.keyPlaces||[]).map(function(k){
         return '<span class="keychip'+(j.key===k?' on':'')+'">'
@@ -2987,37 +2991,62 @@ function infoTab(j){
           +'<button data-keydel="'+esc(k)+'" aria-label="この登録を消す">×</button></span>'; }).join("")
     + (j.key && (DB.keyPlaces||[]).indexOf(j.key)<0
         ? '<button data-keyadd class="add">＋ いまの内容を登録</button>' : '')
-    + (!(DB.keyPlaces||[]).length && !j.key
-        ? '<span class="note" style="align-self:center">よく使う鍵場所を登録しておけます</span>' : '')
-    +'</div></div>'
-    /* ここから下は、ISSが発注を始めるのに要るもの。
-       発注業務マニュアルに「工事ID・希望工期・注意事項」「納品先は営業の指示を必ず確認」
-       とある。現調で決まっているのに伝わっていなかった。 */
-    /* 工事IDは営業が作れない。FMに打ち込んで初めて採番される。
-       ここに空欄を置くと「埋めなければ」と思わせるだけなので、置かない */
+    +'</div>'
+    +'<div class="note" style="margin-top:4px">帰りにキーボックスを仕込む場所。職人はここから入ります。</div>'
+    +'</div>';
+
+  var h='<div class="card"><div class="card-h"><h2>着いてすぐ</h2>'
+    +'<span class="eyebrow num" style="margin-left:auto">'+esc(j.gid||"")+'</span></div>'
+    +'<div class="card-b">'+here+'</div></div>';
+
+  /* ── 物件のこと。事務所で埋まる。現場では触らない ── */
+  var prop=''
+    +'<div class="grid2">'+fld("顧客","customer",j.customer)+fld("店舗","store",j.store)+'</div>'
+    +'<div class="grid2">'+fld("担当","staff",j.staff)+fld("現調日","date",j.date,"date")+'</div>'
+    +fld("住所","addr",j.addr)
+    +'<div class="grid2">'
+    +'<div class="field"><label>工事申請</label><div class="chips">'
+    + ["あり","なし"].map(function(k){ return '<button data-jset="apply|'+k+'" aria-pressed="'+(j.apply===k)+'">'+k+'</button>'; }).join("")+'</div></div>'
+    +'<div class="field"><label>駐車場</label><div class="chips">'
+    + ["あり","なし"].map(function(k){ return '<button data-jset="parking|'+k+'" aria-pressed="'+(j.parking===k)+'">'+k+'</button>'; }).join("")+'</div></div></div>'
+    + (j.parking==="あり"||j.parkingMemo
+        ? '<div class="field"><label>駐車場メモ</label><textarea data-jf="parkingMemo" '
+          +'placeholder="場所・料金・利用時間など（例：建物裏 3番、1日1,500円）" '
+          +'style="min-height:52px">'+esc(j.parkingMemo||"")+'</textarea></div>'
+        : '');
+  var propN=[j.customer,j.store,j.staff,j.addr].filter(Boolean).length;
+  h+=sec("prop","物件のこと", propN?propN+"件 記入ずみ":"顧客・店舗・担当・住所", prop, false);
+
+  /* ── ISSに渡すこと。帰り際に埋まる ── */
+  var iss=''
     +'<div class="field"><label>希望工期</label>'
     +'<input type="text" value="'+esc(j.term||"")+'" data-jf="term" placeholder="例：10/7〜10/11、10日から1週間">'
     +'</div>'
-    /* 現場入れと事務所入れが混ざる工事がある。1つに絞らせない */
     +'<div class="field"><label>材料の納品先</label><div class="chips">'
     + ["現場入れ","事務所入れ","支給あり","未定"].map(function(k){
         return '<button data-jmulti="deliv|'+k+'" aria-pressed="'
           +(delivList(j).indexOf(k)>=0)+'">'+k+'</button>'; }).join("")
     +'</div>'
-    +'<input type="text" value="'+esc(j.delivMemo||"")+'" data-jf="delivMemo" style="margin-top:5px" '
-    +'placeholder="鍵の所在が特殊なとき、置き場所の指定など">'
-    +'<div class="note" style="margin-top:4px">材料は工事前に納品されないと、職人が何もできません。</div>'
+    + (delivList(j).length||j.delivMemo
+        ? '<input type="text" value="'+esc(j.delivMemo||"")+'" data-jf="delivMemo" style="margin-top:5px" '
+          +'placeholder="置き場所の指定など">' : '')
     +'</div>'
     +'<div class="field"><label>職人の指定</label>'
     +'<input type="text" value="'+esc(j.shokunin||"")+'" data-jf="shokunin" '
     +'placeholder="指定があれば。無ければ空のままで構いません">'
     +'</div>'
-    +'<div class="field"><label>注意事項・特記</label>'
-    +'<textarea data-jf="caution" placeholder="近隣・在宅・騒音の制限、進入経路、駐車の可否など。ISSから職人へ伝えます">'
-    +esc(j.caution||"")+'</textarea></div>'
-    +'<div class="field"><label>ISS伝達メモ</label><textarea data-jf="issMemo" placeholder="見積代行への申し送り">'+esc(j.issMemo||"")+'</textarea></div>'
-    +'<div class="field"><label>個人メモ</label><textarea data-jf="myMemo" placeholder="自分用。ISSには渡りません">'+esc(j.myMemo||"")+'</textarea></div>'
-    +'</div></div>';
+    /* 「注意事項・特記」と「ISS伝達メモ」は、営業から見て違いが説明できない。1つにする */
+    +'<div class="field"><label>ISSに伝えること</label>'
+    +'<textarea data-jf="caution" style="min-height:84px" '
+    +'placeholder="近隣・在宅・騒音の制限、進入経路、駐車の可否、見積の申し送りなど。ISSから職人へも伝わります">'
+    +esc(j.caution||"")+'</textarea></div>';
+  var issN=[j.term,delivList(j).length?"1":"",j.shokunin,j.caution].filter(Boolean).length;
+  h+=sec("iss","ISSに渡すこと", issN?issN+"件 記入ずみ":"工期・納品先・伝えること", iss, false);
+
+  /* ── 自分用 ── */
+  h+=sec("mine","自分用メモ", j.myMemo?"記入あり":"ISSには渡りません",
+    '<div class="field"><textarea data-jf="myMemo" style="min-height:84px" '
+    +'placeholder="自分用。ISSには渡りません">'+esc(j.myMemo||"")+'</textarea></div>', false);
 
   /* 間取りから自動で並ぶので、普段は畳んでおく。洋室が複数あって名前を直したいときだけ開く */
   h+='<div class="card"><div class="card-h"><h3>部屋</h3>'
@@ -3638,24 +3667,33 @@ function koushuView(){
 
 /* ---------- 設備 ---------- */
 function equipTab(j){
-  var h='<div class="guide" style="margin-bottom:12px"><b>この画面は何のためか</b><br>'
-    +'いま入っている設備の<b>メーカー・品番・設置年</b>を残します。今回の工事にはなりませんが、'
-    +'次に「そろそろ交換では」と提案するときの判断材料になります。<br>'
-    +'エアコンなら年式7〜10年で交換提案、給湯器なら品番とガス種——といった判断が、記録がないとできません。</div>';
+  var h='<div class="note" style="margin-bottom:10px">'
+    +'いま入っている設備のメーカー・品番・設置年を残します。'
+    +'今回の工事にはなりませんが、次の交換提案の材料になります。</div>';
   h+='<div class="card"><div class="card-h"><h3>設備台帳</h3>'
     +'<span class="eyebrow" style="margin-left:auto">次回提案の材料</span></div><div class="card-b">';
   if(!(j.equip||[]).length) h+='<div class="empty">品番と設置年を残すと、次回の交換提案に使えます。</div>';
+  /* 1設備あたり30個の候補チップが出て、3台で90個になっていた。
+     開いている1つだけ中身を出す。ほかは1行にたたむ */
   (j.equip||[]).forEach(function(e,i){
-    var man=manualFor(e.kind);
-    h+='<div class="line"><div class="top" style="align-items:center">'
-      +'<div class="nm" style="flex:1">'+esc(e.kind||"設備")+'</div>'
-      +(man?'<button class="helpbtn" data-help="'+esc(e.kind)+'">?</button>':'')
-      +'<button class="x" data-dele="'+i+'" aria-label="削除">×</button></div>'
-      + freeField("種別","e","kind",e.kind,i,EQUIP_KINDS,"何の設備か。一覧に無ければそのまま打つ")
-      + freeField("場所","e","place",e.place,i,placeChips(j),"どこに付いているか")
-      +'<div class="grid2" style="margin-top:8px">'+ef("メーカー","maker",e.maker,i)+ef("品番","model",e.model,i)+'</div>'
-      +'<div class="grid2">'+ef("サイズ・間口","size",e.size,i)+ef("設置年","year",e.year,i)+'</div>'
-      +'<textarea data-e="note" data-i="'+i+'" placeholder="メモ">'+esc(e.note||"")+'</textarea></div>';
+    var man=manualFor(e.kind), open=(V.eq===i);
+    var sum=[e.place,e.maker,e.model,e.year].filter(Boolean).join(" ");
+    h+='<div class="line'+(open?"":" fold")+'">'
+      +'<button class="eqh" data-eqopen="'+i+'">'
+      +'<span class="k">'+esc(e.kind||"設備")+'</span>'
+      +'<span class="s">'+esc(sum||"未記入")+'</span>'
+      +'<span class="c">'+(open?'−':'＋')+'</span></button>';
+    if(open){
+      h+='<div class="top" style="align-items:center;margin-top:4px">'
+        +(man?'<button class="helpbtn" data-help="'+esc(e.kind)+'">調べ方</button>':'')
+        +'<button class="x" data-dele="'+i+'" aria-label="削除" style="margin-left:auto">×</button></div>'
+        + freeField("種別","e","kind",e.kind,i,EQUIP_KINDS,"何の設備か。一覧に無ければそのまま打つ")
+        + freeField("場所","e","place",e.place,i,placeChips(j),"どこに付いているか")
+        +'<div class="grid2" style="margin-top:8px">'+ef("メーカー","maker",e.maker,i)+ef("品番","model",e.model,i)+'</div>'
+        +'<div class="grid2">'+ef("サイズ・間口","size",e.size,i)+ef("設置年","year",e.year,i)+'</div>'
+        +'<textarea data-e="note" data-i="'+i+'" placeholder="メモ">'+esc(e.note||"")+'</textarea>';
+    }
+    h+='</div>';
   });
   h+='<button class="btn ghost wide sm" data-adde style="margin-top:10px">＋ 設備を追加</button></div></div>';
   return h;
@@ -3686,19 +3724,28 @@ function placeChips(j){
 
 /* ---------- 不具合 ---------- */
 function issueTab(j){
-  var h='<div class="guide" style="margin-bottom:12px"><b>この画面は何のためか</b><br>'
-    +'工事項目にはならない「気になったこと」を残す場所です。水漏れ、床の沈み、便器の交換など、'
-    +'症状や工事を選ぶと<b>現場で確かめるべき項目</b>が出ます。<br>'
-    +'ここを潰しておかないと、着工してから「床下地が腐っていた」と発覚して追加工事になります。'
-    +'過去に実際に起きた事例（現場トラブル図鑑）から作っています。</div>';
+  var h='<div class="note" style="margin-bottom:10px">'
+    +'工事項目にはならない「気になったこと」を残す場所です。'
+    +'症状を選ぶと、現場で確かめるべき項目が出ます。</div>';
   h+='<div class="card"><div class="card-h"><h3>要確認のリスト</h3>'
     +'<span class="eyebrow" style="margin-left:auto">症状から確認項目</span></div><div class="card-b">';
   if(!(j.issues||[]).length) h+='<div class="empty">下の「＋」を押して、気になった症状を選んでください。<br>確かめるべき項目が自動で出ます。</div>';
+  /* 1件ずつ畳む。いま見ている1件だけ中身を出す */
   (j.issues||[]).forEach(function(s,i){
     var sy=SYMPTOMS[s.sym]||{checks:[],ref:""}, done=s.done||[];
-    h+='<div class="line"><div class="top" style="align-items:center">'
-      +'<div class="nm" style="flex:1">'+esc(s.sym||"気になったこと")+'</div>'
-      +'<button class="x" data-dels="'+i+'" aria-label="削除">×</button></div>'
+    var open=(V.iss===i), left0=sy.checks.length-done.length;
+    h+='<div class="line'+(open?"":" fold")+'">'
+      +'<button class="eqh" data-issopen="'+i+'">'
+      +'<span class="k">'+esc(s.sym||"気になったこと")+'</span>'
+      +'<span class="s">'+esc([s.place,s.spot].filter(Boolean).join(" ")||"")+'</span>'
+      +(sy.checks.length
+        ? (left0>0?'<span class="n" style="color:var(--crit);font-weight:700;font-size:12px">未'+left0+'</span>'
+                  :'<span class="n" style="color:var(--ok);font-weight:700;font-size:12px">ずみ</span>')
+        : '')
+      +'<span class="c">'+(open?'−':'＋')+'</span></button>';
+    if(!open){ h+='</div>'; return; }
+    h+='<div class="top" style="align-items:center">'
+      +'<button class="x" data-dels="'+i+'" aria-label="削除" style="margin-left:auto">×</button></div>'
       + freeField("症状","s","sym",s.sym,i,Object.keys(SYMPTOMS),
           "見たままを書く。下の言葉と合えば、確認項目が出ます")
       +'<div class="grid2" style="margin-top:8px">'
@@ -3737,9 +3784,17 @@ function photoTab(j){
     var groups=photoGroupsFor(rm);
     var all=0,got=0;
     groups.forEach(function(g){ g.points.forEach(function(p){ all++; if(done.indexOf(rm+"::"+p)>=0) got++; }); });
-    h+='<div class="card"><div class="card-h"><h3>'+esc(rm)+'</h3>'
-      +(all-got?'<span class="pill crit" style="margin-left:auto">残り'+(all-got)+'</span>'
-              :'<span class="pill ok" style="margin-left:auto">ずみ</span>')+'</div><div class="card-b">';
+    /* 部屋ぜんぶを並べると、1Kでも8画面ぶんになる。
+       いま撮っている部屋だけ開く。ほかは残り枚数だけ見せる */
+    var ropen = (V.proom===rm);
+    h+='<div class="card sec'+(ropen?" open":"")+'">'
+      +'<button class="sech" data-proom="'+esc(rm)+'">'
+      +'<span class="t">'+esc(rm)+'</span>'
+      +(all-got?'<span class="n" style="color:var(--crit);font-weight:700">残り'+(all-got)+'枚</span>'
+              :'<span class="n" style="color:var(--ok);font-weight:700">ずみ '+all+'枚</span>')
+      +'<span class="c">'+(ropen?'−':'＋')+'</span></button>';
+    if(!ropen){ h+='</div>'; return; }
+    h+='<div class="card-b">';
     groups.forEach(function(g){
       if(g.src) h+='<div class="eyebrow" style="margin:6px 0 4px">'+esc(g.src)+'</div>';
       g.points.forEach(function(p){
@@ -4035,7 +4090,7 @@ document.addEventListener("keydown",function(e){
 /* ---------- 操作 ---------- */
 document.addEventListener("click",function(e){
   var t=e.target.closest("[data-open],[data-new],[data-reset],[data-back],[data-tab],[data-cat],[data-go],"
-    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-ack],[data-kiri],[data-guide],[data-picopenbox],[data-more],[data-pick],[data-fb],[data-fbclose],[data-fbcopy],[data-voice],[data-acflag],[data-setf],[data-spec],"
+    +"[data-add],[data-addfree],[data-del],[data-addm],[data-delm],[data-jset],[data-jflag],[data-jmulti],[data-acn],[data-acadd],[data-ack],[data-kiri],[data-guide],[data-picopenbox],[data-more],[data-pick],[data-sec],[data-proom],[data-eqopen],[data-issopen],[data-fb],[data-fbclose],[data-fbcopy],[data-voice],[data-acflag],[data-setf],[data-spec],"
     +"[data-addroom],[data-delroom],[data-openrooms],[data-adde],[data-dele],[data-adds],[data-dels],[data-help],[data-send],"
     +"[data-keyset],[data-keydel],[data-keyadd],[data-place],[data-allplace],[data-pdrop],[data-moreplace],[data-rsc],[data-rpart],[data-hi],[data-hd],[data-nq],[data-nadd],[data-dir],[data-loss],[data-grip],[data-tile],[data-eqo],[data-pk],[data-pko],[data-pks],[data-pkg],[data-pkdz],[data-pkp],[data-addpack],[data-say],[data-imp],[data-impflush],[data-impclose],[data-addrow],[data-delrow],[data-sayit],[data-impstop],[data-saybox],[data-sayword],[data-picopen],[data-picclose],[data-picdel],[data-walkgo],[data-go],[data-walktypeon],[data-walktypeoff],[data-walkflush],[data-sayall]");
   if(!t) return;
@@ -4298,6 +4353,23 @@ document.addEventListener("click",function(e){
     } else done(false);
     return;
   }
+  if(t.dataset.issopen!=null){
+    V.iss = (V.iss===+t.dataset.issopen) ? null : +t.dataset.issopen;
+    return render();
+  }
+  if(t.dataset.eqopen!=null){
+    V.eq = (V.eq===+t.dataset.eqopen) ? null : +t.dataset.eqopen;
+    return render();
+  }
+  if(t.dataset.proom){
+    V.proom = (V.proom===t.dataset.proom) ? null : t.dataset.proom;
+    return render();
+  }
+  if(t.dataset.sec){
+    V.sec=V.sec||{};
+    V.sec[t.dataset.sec] = !V.sec[t.dataset.sec];
+    return render();
+  }
   if(t.dataset.guide!=null){
     V.guide = (V.guide===+t.dataset.guide) ? null : +t.dataset.guide; return render();
   }
@@ -4524,11 +4596,13 @@ document.addEventListener("click",function(e){
   }
   if(t.dataset.delroom!=null&&j){ j.rooms.splice(+t.dataset.delroom,1); delete j.roomsAuto; save(); return render(); }
   if(t.hasAttribute("data-adde")&&j){
+    V.eq=(j.equip||[]).length;
     /* 勝手に決めない。何の設備かも、どこかも、現場が書く */
     j.equip.push({place:"",kind:"",maker:"",model:"",size:"",year:"",note:""});
     save(); return render(); }
   if(t.dataset.dele!=null&&j){ j.equip.splice(+t.dataset.dele,1); save(); return render(); }
   if(t.hasAttribute("data-adds")&&j){
+    V.iss=(j.issues||[]).length;
     j.issues.push({place:"",sym:"",spot:"",note:"",done:[]}); save(); return render(); }
   if(t.dataset.dels!=null&&j){ j.issues.splice(+t.dataset.dels,1); save(); return render(); }
 });
